@@ -271,6 +271,9 @@ export const knowledgeDocs = pgTable('knowledge_docs', {
   size: text('size').notNull(),
   status: text('status').$type<'indexed' | 'indexing' | 'failed'>().notNull(),
   chunks: integer('chunks').notNull().default(0),
+  /** Extracted plain text, searched by keyword at run time (agents with « Base de connaissances »). */
+  content: text('content'),
+  error: text('error'),
   createdAt: createdAt(),
 })
 

@@ -179,14 +179,18 @@ export interface Trace {
   durationMs: number
   tokens: number
   cost: number
-  status: 'ok' | 'error'
+  status: 'ok' | 'error' | 'blocked' | 'running'
   input: string
   spans: Span[]
 }
 
 export interface Approval {
   id: ID
+  /** agent = action proposed by a user agent; team = decision requested by the internal team. */
+  source?: 'agent' | 'team'
+  /** Agent id, or the team request id when source = team. */
   agentId: ID
+  requestId?: ID
   action: string
   reason: string
   risk: 'low' | 'medium' | 'high'
@@ -217,6 +221,7 @@ export interface KnowledgeDoc {
   size: string
   status: 'indexed' | 'indexing' | 'failed'
   chunks: number
+  error?: string | null
 }
 
 export interface MemoryItem {
@@ -242,6 +247,17 @@ export interface TeamMember {
   email: string
   role: Role
   lastActiveAt: ISODate
+  /** Invitation not accepted yet. */
+  invited?: boolean
+  /** Returned once, when the invitation is created. */
+  inviteUrl?: string
+}
+
+export interface User {
+  id: ID
+  name: string
+  email: string
+  role: Role
 }
 
 export interface ApiKey {
@@ -249,6 +265,9 @@ export interface ApiKey {
   name: string
   prefix: string
   environment: 'live' | 'test'
+  /** secret: server-to-server (Bearer). publishable: widget key, bound to one project. */
+  scope?: 'secret' | 'publishable'
+  projectId?: ID | null
   createdAt: ISODate
   lastUsedAt: ISODate | null
 }
@@ -340,4 +359,79 @@ export interface CheckResult {
   label: string
   status: 'pending' | 'ok' | 'warn' | 'fail'
   detail: string
+}
+
+/* ---------- Internal team (multi-agent engine) ---------- */
+
+export type TeamRole = 'orchestrator' | 'architect' | 'builder' | 'security' | 'tester' | 'supervisor'
+
+export interface TeamAgentInfo {
+  role: TeamRole
+  label: string
+  mission: string
+  model: string
+  /** Server capabilities this role can use (least privilege). */
+  capabilities: string[]
+  status: 'idle' | 'queued' | 'working'
+  running: number
+  queued: number
+  tasksDone: number
+  tasksFailed: number
+  tokens: number
+  cost: number
+  lastActivityAt: ISODate | null
+}
+
+export type TeamRequestStatus = 'running' | 'awaiting_approval' | 'done' | 'failed' | 'vetoed' | 'stopped'
+
+export interface TeamRequest {
+  id: ID
+  kind: 'create_agent' | 'supervise'
+  input: Record<string, unknown>
+  status: TeamRequestStatus
+  result: Record<string, unknown> | null
+  error: string | null
+  steps: number
+  agentCalls: number
+  tokens: number
+  cost: number
+  createdBy: ID | null
+  createdAt: ISODate
+  finishedAt: ISODate | null
+}
+
+export interface TeamTask {
+  id: ID
+  requestId: ID
+  parentId: ID | null
+  role: TeamRole
+  status: 'queued' | 'running' | 'done' | 'failed' | 'vetoed' | 'cancelled'
+  input: Record<string, unknown>
+  output: Record<string, unknown> | null
+  tokens: number
+  cost: number
+  durationMs: number
+  model: string | null
+  error: string | null
+  createdAt: ISODate
+  startedAt: ISODate | null
+  finishedAt: ISODate | null
+}
+
+export interface TeamEvent {
+  id: number
+  requestId: ID
+  taskId: ID | null
+  at: ISODate
+  fromRole: string
+  toRole: string | null
+  type: string
+  payload: Record<string, unknown> | null
+}
+
+export interface CreateAgentRequestInput {
+  brief: string
+  projectId: ID
+  maxActions: string[]
+  autonomyCeiling: Autonomy
 }

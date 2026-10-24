@@ -39,7 +39,7 @@ export async function assertPublicUrl(raw: string) {
 }
 
 /** GET with manual redirects (each hop re-checked), size cap and timeout. */
-async function safeGet(raw: string, timeoutMs = 6000): Promise<{ status: number; body: string; latencyMs: number }> {
+export async function safeGet(raw: string, timeoutMs = 6000): Promise<{ status: number; body: string; latencyMs: number }> {
   let url = await assertPublicUrl(raw)
   const t0 = Date.now()
   for (let hop = 0; hop < 4; hop++) {
