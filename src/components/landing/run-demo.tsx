@@ -54,30 +54,35 @@ const KIND_CLS: Record<string, string> = {
   output: 'text-[#3ccf8e]',
 }
 
-export function RunDemo({ className }: { className?: string }) {
-  const [run, setRun] = useState<RunId>('error')
-  const [shown, setShown] = useState(0)
-  const timer = useRef<number | null>(null)
+function RunLines({ run }: { run: RunId }) {
   const data = RUNS[run]
+  const [shown, setShown] = useState(() => (matchMedia('(prefers-reduced-motion: reduce)').matches ? data.lines.length + 1 : 0))
+  const timer = useRef<number | null>(null)
 
   useEffect(() => {
-    setShown(0)
-    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (reduce) {
-      setShown(data.lines.length + 1)
-      return
-    }
-    let i = 0
-    const tick = () => {
-      i += 1
-      setShown(i)
-      if (i <= data.lines.length) timer.current = window.setTimeout(tick, 420)
-    }
-    timer.current = window.setTimeout(tick, 250)
+    if (shown > data.lines.length) return
+    timer.current = window.setTimeout(() => setShown((n) => n + 1), shown === 0 ? 250 : 420)
     return () => {
       if (timer.current) window.clearTimeout(timer.current)
     }
-  }, [run, data.lines.length])
+  }, [shown, data.lines.length])
+
+  return (
+    <ol className="min-h-[232px] px-4 pb-4 text-[12.5px] leading-[1.9]" aria-live="polite">
+      {data.lines.slice(0, shown).map(([kind, who, text], i) => (
+        <li key={i} className="grid grid-cols-[6.5rem_1fr] gap-3 animate-in fade-in slide-in-from-bottom-1 duration-300">
+          <code className={cn('truncate', KIND_CLS[kind])}>{who}</code>
+          <code className="text-white/90">{text}</code>
+        </li>
+      ))}
+      {shown > data.lines.length && <li className="mt-2 text-white/60 animate-in fade-in">Terminé · {data.total}</li>}
+      {shown <= data.lines.length && <li className="mt-1 h-4 w-2 animate-pulse bg-white/70" aria-hidden />}
+    </ol>
+  )
+}
+
+export function RunDemo({ className }: { className?: string }) {
+  const [run, setRun] = useState<RunId>('error')
 
   return (
     <div className={cn('overflow-hidden rounded-lg bg-[#0b0c0e] text-[#eef0f3] shadow-float', className)} data-ui>
@@ -94,17 +99,8 @@ export function RunDemo({ className }: { className?: string }) {
           </button>
         ))}
       </div>
-      <div className="px-4 pt-3 pb-1 text-[14px] font-semibold">{data.agent}</div>
-      <ol className="min-h-[232px] px-4 pb-4 font-mono text-[12.5px] leading-[1.9]" aria-live="polite">
-        {data.lines.slice(0, shown).map(([kind, who, text], i) => (
-          <li key={`${run}-${i}`} className="grid grid-cols-[6.5rem_1fr] gap-3 animate-in fade-in slide-in-from-bottom-1 duration-300">
-            <span className={cn('truncate', KIND_CLS[kind])}>{who}</span>
-            <span className="text-white/90">{text}</span>
-          </li>
-        ))}
-        {shown > data.lines.length && <li className="mt-2 text-white/55 animate-in fade-in">✓ terminé · {data.total}</li>}
-        {shown <= data.lines.length && <li className="mt-1 h-4 w-2 animate-pulse bg-white/70" aria-hidden />}
-      </ol>
+      <div className="px-4 pt-3 pb-1 text-[14px] font-semibold">{RUNS[run].agent}</div>
+      <RunLines key={run} run={run} />
     </div>
   )
 }

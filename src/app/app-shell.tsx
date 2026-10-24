@@ -15,7 +15,8 @@ import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { CommandPalette } from './command-palette'
 import { NAV } from './nav'
-import { MOD, ShortcutsDialog, useGlobalShortcuts } from './shortcuts'
+import { MOD, useGlobalShortcuts } from './shortcuts'
+import { ShortcutsDialog } from './shortcuts-dialog'
 import { useUiState } from './ui-state'
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {

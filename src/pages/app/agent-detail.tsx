@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, Copy, ExternalLink, MoreHorizontal, Pause, Play, Plus, RotateCcw, Send, SquareTerminal, Trash2, Wifi, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { api } from '@/api'
 import { keys, useAction, useAgent, useConnectors, useMemories, useProjects, useSkills, useTraces } from '@/api/hooks'
@@ -98,7 +98,7 @@ function Overview({ agent }: { agent: Agent }) {
                   <span className="min-w-0 flex-1 truncate">{t.input}</span>
                   <span className="text-muted-foreground tabular">{duration(t.durationMs)}</span>
                   <span className="hidden w-16 text-right tabular sm:inline">{usd(t.cost)}</span>
-                  <span className="hidden w-24 text-right text-muted-foreground sm:inline">{relative(t.at)}</span>
+                  <span className="hidden w-28 text-right whitespace-nowrap text-muted-foreground sm:inline">{relative(t.at)}</span>
                 </Link>
               ))}
             </Panel>
@@ -117,7 +117,6 @@ function Config({ agent }: { agent: Agent }) {
   const [publishOpen, setPublishOpen] = useState(false)
   const [note, setNote] = useState('')
   const update = useUpdate(agent)
-  useEffect(() => setF(agent), [agent])
   const dirty = useMemo(() => JSON.stringify(f) !== JSON.stringify(agent), [f, agent])
   const set = (p: Partial<Agent>) => setF((x) => ({ ...x, ...p }))
   const patch = (): Partial<Agent> => ({
@@ -684,7 +683,7 @@ export default function AgentDetail() {
 
       <div role="tabpanel" aria-label={TABS.find((t) => t[0] === tab)?.[1]}>
         {tab === 'overview' && <Overview agent={a} />}
-        {tab === 'config' && <Config agent={a} />}
+        {tab === 'config' && <Config key={a.updatedAt + a.version} agent={a} />}
         {tab === 'skills' && <Skills agent={a} />}
         {tab === 'triggers' && <Triggers agent={a} />}
         {tab === 'tools' && <Tools agent={a} />}

@@ -26,7 +26,9 @@ export function LogStream({ agentId, height = 'h-[360px]', className }: { agentI
   const [cleared, setCleared] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   const pausedRef = useRef(paused)
-  pausedRef.current = paused
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
 
   useEffect(() => {
     const off = api.logs.subscribe(

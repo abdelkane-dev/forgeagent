@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-export async function copyText(text: string) {
+async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text)
     return true

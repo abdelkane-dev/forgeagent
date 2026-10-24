@@ -1,16 +1,17 @@
-/** French formatting helpers. Numbers use narrow no-break spaces as thousands separators. */
+/** French formatting helpers. Narrow no-break spaces (U+202F) become regular no-break spaces: the UI font has no glyph for them. */
+const nb = (s: string) => s.replace(/ /g, " ")
 
 const nf = new Intl.NumberFormat('fr-FR')
 const nf1 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 })
 const rtf = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' })
 
-export const num = (n: number) => nf.format(n)
+export const num = (n: number) => nb(nf.format(n))
 
-export const pct = (n: number) => `${nf1.format(n)} %`
+export const pct = (n: number) => `${nb(nf1.format(n))} %`
 
 export function usd(n: number) {
   const digits = n !== 0 && Math.abs(n) < 0.1 ? 3 : 2
-  return `${n.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} $`
+  return `${nb(n.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits }))} $`
 }
 
 export function duration(ms: number) {
@@ -20,7 +21,7 @@ export function duration(ms: number) {
 }
 
 export function compact(n: number) {
-  return new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
+  return nb(new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(n))
 }
 
 export function relative(iso: string | null) {

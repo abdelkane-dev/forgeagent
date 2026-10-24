@@ -1,6 +1,7 @@
 import type {
   AgentStatus,
   AgentType,
+  Environment,
   Autonomy,
   ClaudeModel,
   IntegrationChannel,
@@ -102,3 +103,5 @@ export const NODE_KINDS: Record<WorkflowNodeKind, string> = {
   subagent: 'Sous-agent (A2A)',
   output: 'Sortie',
 }
+
+export const ENV_LABEL: Record<Environment, string> = { test: 'Test', staging: 'Préproduction', production: 'Production' }

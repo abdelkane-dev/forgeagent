@@ -1,5 +1,5 @@
 import { ArrowLeft, Plus, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '@/api'
 import { keys, useAction, useAgents, useProject } from '@/api/hooks'
@@ -15,12 +15,11 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { date, num, usd } from '@/lib/format'
-import { ENV_LABEL } from './projects'
+import { ENV_LABEL } from '@/lib/labels'
 
 function Settings({ project }: { project: Project }) {
   const [p, setP] = useState(project)
   const [domain, setDomain] = useState('')
-  useEffect(() => setP(project), [project])
   const save = useAction((patch: Partial<Project>) => api.projects.update(project.id, patch), { invalidate: [keys.project(project.id), keys.projects], success: 'Projet enregistré' })
   const dirty = JSON.stringify(p) !== JSON.stringify(project)
   return (
@@ -195,7 +194,7 @@ export default function ProjectDetail() {
           </Section>
         </div>
         <div>
-          <Settings project={p} />
+          <Settings key={JSON.stringify(p)} project={p} />
         </div>
       </div>
 

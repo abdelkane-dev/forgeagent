@@ -111,7 +111,7 @@ function Traces() {
           const current = list.find((t) => t.id === selected)
           if (!rows.length) return <EmptyState title="Aucune trace" description="Aucune exécution ne correspond à ces filtres." />
           return (
-            <div className={cn('grid gap-6', current && 'xl:grid-cols-[1fr_1.1fr]')}>
+            <div className={cn('grid gap-6', current && "2xl:grid-cols-[1fr_1fr]")}>
               <div className="scrollbar-thin overflow-x-auto">
                 <table className="w-full min-w-[560px] text-[14px]">
                   <thead>
@@ -142,7 +142,7 @@ function Traces() {
                         <td className="max-w-[220px] truncate py-3 pr-3">{name(t.agentId)}</td>
                         <td className="py-3 text-right tabular">{duration(t.durationMs)}</td>
                         <td className="py-3 text-right tabular">{usd(t.cost)}</td>
-                        <td className="py-3 text-right text-muted-foreground">{relative(t.at)}</td>
+                        <td className="py-3 pl-3 text-right whitespace-nowrap text-muted-foreground">{relative(t.at)}</td>
                       </tr>
                     ))}
                   </tbody>

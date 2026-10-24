@@ -1,5 +1,5 @@
 import { Play, Plus, Save, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
+import { useRef, useState, type PointerEvent as RPointerEvent } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/api'
 import { keys, useAction, useAgents, useDelegations, useSchedules, useWorkflows } from '@/api/hooks'
@@ -108,17 +108,15 @@ export default function Workflows() {
   const agents = useAgents()
   const delegations = useDelegations()
   const schedules = useSchedules()
-  const [wf, setWf] = useState<Workflow | null>(null)
+  const [draft, setWf] = useState<Workflow | null>(null)
+  const wf = draft ?? workflows.data?.[0] ?? null
+  const nextId = useRef(1)
   const [selected, setSelected] = useState<string | null>(null)
   const [running, setRunning] = useState(-1)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [cron, setCron] = useState('')
   const [cronAgent, setCronAgent] = useState('')
-
-  useEffect(() => {
-    if (workflows.data && !wf) setWf(workflows.data[0])
-  }, [workflows.data, wf])
 
   const save = useAction((w: Workflow) => api.workflows.save({ ...w, published: true }), { invalidate: [keys.workflows], success: 'Workflow publié' })
   const toggleDel = useAction(({ id, v }: { id: string; v: boolean }) => api.delegations.toggle(id, v), { invalidate: [keys.delegations] })
@@ -133,7 +131,7 @@ export default function Workflows() {
 
   const addNode = (kind: WorkflowNodeKind) => {
     const last = wf.nodes[wf.nodes.length - 1]
-    const n: WorkflowNode = { id: `n${Date.now()}`, kind, label: `Nouvelle étape`, x: last ? (last.x + 260 > 560 ? 24 : last.x + 260) : 24, y: last ? (last.x + 260 > 560 ? last.y + 140 : last.y) : 24, retry: false }
+    const n: WorkflowNode = { id: `new${nextId.current++}`, kind, label: `Nouvelle étape`, x: last ? (last.x + 260 > 560 ? 24 : last.x + 260) : 24, y: last ? (last.x + 260 > 560 ? last.y + 140 : last.y) : 24, retry: false }
     setWf({ ...wf, nodes: [...wf.nodes, n] })
     setSelected(n.id)
   }

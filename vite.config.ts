@@ -14,7 +14,11 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes('node_modules')) {
             if (id.includes('motion')) return 'motion'
-            if (id.includes('radix') || id.includes('cmdk')) return 'ui'
+            if (id.includes('@base-ui') || id.includes('@floating-ui') || id.includes('cmdk')) return 'ui'
+            if (/[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
+            if (id.includes('react-router')) return 'router'
+            if (id.includes('@tanstack')) return 'query'
+            if (id.includes('lucide-react')) return 'icons'
             return 'vendor'
           }
         },

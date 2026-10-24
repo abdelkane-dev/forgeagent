@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router'
 import { api } from '@/api'
 import { keys, useAction, useAgents, useProjects } from '@/api/hooks'
 import type { Environment } from '@/api/types'
+import { ENV_LABEL } from '@/lib/labels'
 import { Field } from '@/components/common/field'
 import { PageHeader } from '@/components/common/page'
 import { Async, EmptyState } from '@/components/common/states'
@@ -13,7 +14,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
-export const ENV_LABEL: Record<Environment, string> = { test: 'Test', staging: 'Préproduction', production: 'Production' }
 
 export default function Projects() {
   const projects = useProjects()

@@ -78,7 +78,7 @@ function Hero() {
       />
 
       <div className="relative mx-auto grid h-full max-w-[1440px] gap-10 px-4 pt-28 sm:px-8 lg:grid-cols-12 lg:items-center lg:pt-0">
-        <Stagger className="lg:col-span-6">
+        <Stagger className="min-w-0 lg:col-span-6">
           <Item>
             <h1 className="text-[clamp(52px,6.4vw,104px)] leading-[0.9] font-extrabold tracking-[-0.05em]">
               Forgez vos
@@ -100,7 +100,7 @@ function Hero() {
         </Stagger>
 
         {/* The live run sits on the ingot */}
-        <div className="relative lg:col-span-5 lg:col-start-8">
+        <div className="relative min-w-0 lg:col-span-5 lg:col-start-8">
           <div aria-hidden className="hex absolute top-[-6%] left-1/2 aspect-square w-[130vw] -translate-x-1/2 bg-cobalt sm:w-[110vw] lg:hidden" />
           <motion.div
             className="relative py-[14vw] sm:py-24 lg:py-0"
@@ -108,7 +108,7 @@ function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
           >
-            <p className="mb-3 text-[15px] font-semibold text-cobalt-ink">Choisissez un incident, regardez l’agent travailler</p>
+            <p className="mb-3 w-fit rounded-md bg-cobalt px-2.5 py-1 text-[15px] font-semibold text-cobalt-ink">Choisissez un incident, regardez l’agent travailler</p>
             <RunDemo />
           </motion.div>
         </div>
@@ -135,7 +135,7 @@ function Tile({ className, title, text, children, tone = 'card' }: { className?:
 
 function Features() {
   return (
-    <section id="fonctionnalites" className="mx-auto max-w-[1440px] scroll-mt-6 px-2.5 py-[120px] sm:px-8 lg:py-[180px]">
+    <section id="fonctionnalites" className="mx-auto max-w-[1440px] scroll-mt-6 px-2.5 py-[120px] sm:px-8 lg:pt-[96px] lg:pb-[180px]">
       <Stagger className="grid auto-rows-[28vw] grid-cols-2 gap-1.5 sm:auto-rows-[104px] sm:grid-cols-12 sm:gap-2">
         <Tile className="col-span-2 row-span-2 sm:col-span-6" tone="secondary">
           <h2 className="absolute top-5 left-5 max-w-[12ch] text-[clamp(36px,4vw,60px)] leading-[0.95] font-extrabold tracking-[-0.045em]">Gardez la main.</h2>
@@ -150,7 +150,7 @@ function Features() {
           </div>
         </Tile>
         <Tile className="col-span-2 row-span-3 sm:col-span-6 sm:row-span-4" tone="ink" title="Trois niveaux d’autonomie" text="Suggérer, agir après validation, ou agir seul sur les cas simples.">
-          <div data-ui className="absolute top-8 -right-24 left-6 grid gap-[0.25em] text-[220%] sm:top-10 sm:text-[300%]" aria-hidden>
+          <div data-ui className="absolute top-8 right-6 left-6 flex flex-wrap gap-[0.2em] text-[220%] sm:top-10 lg:right-auto lg:flex-nowrap lg:text-[300%]" aria-hidden>
             {['Suggère seulement', 'Après validation', 'Agit seul'].map((x, i) => (
               <div key={x} className={cn('w-fit rounded-[0.2em] px-[0.4em] py-[0.12em] text-[55%] font-bold whitespace-nowrap', i === 1 ? 'bg-cobalt text-cobalt-ink' : 'bg-background/10')}>
                 {x}
@@ -166,7 +166,7 @@ function Features() {
           </div>
         </Tile>
         <Tile className="col-span-1 row-span-2 sm:col-span-3 sm:row-span-4" tone="secondary" title="Versions" text="Chaque modification publie une version restaurable.">
-          <div data-ui className="absolute top-6 -left-3 grid gap-[0.2em] text-[230%] font-extrabold tracking-[-0.04em] sm:top-8 sm:text-[300%]" aria-hidden>
+          <div data-ui className="absolute top-6 -left-2 flex gap-[0.3em] text-[230%] font-extrabold tracking-[-0.04em] whitespace-nowrap sm:top-8 sm:text-[300%]" aria-hidden>
             <span>v4</span>
             <span className="text-muted-foreground">v3</span>
             <span className="text-muted-foreground/60">v2</span>
@@ -260,7 +260,7 @@ function ShowFragment({ id }: { id: ShowId }) {
         <div className="ml-auto max-w-[80%] rounded-lg bg-foreground px-4 py-3 text-background">Erreur 500 sur /api/invoices</div>
         <div className="max-w-[88%] rounded-lg bg-secondary px-4 py-3">
           Pool de connexions épuisé depuis 14:02. Je propose de redémarrer search-api : en attente de votre validation.
-          <div className="mt-2 rounded-md bg-background/70 px-3 py-2 font-mono text-[12px]">logs.query · 214 lignes</div>
+          <code className="mt-2 block rounded-md bg-background/70 px-3 py-2 text-[12px]">logs.query · 214 lignes</code>
           <div className="mt-2 text-[12.5px] text-muted-foreground">2,1 s · 3 120 tokens · 0,011 $</div>
         </div>
         <div className="grid gap-1.5 text-[13.5px]">
@@ -390,11 +390,11 @@ function HowItWorks() {
               </div>
             ))}
           </div>
-          <div className="font-mono text-[12px] leading-[1.8] opacity-85">
-            <div>14:02:11 info cron */5 · 3 services vérifiés</div>
-            <div>14:02:40 warn p95 /search 2 140 ms</div>
-            <div>14:03:02 info alerte envoyée à #incidents</div>
-          </div>
+          <code className="block text-[12px] leading-[1.8] opacity-85">
+            <span className="block">14:02:11 info cron */5 · 3 services vérifiés</span>
+            <span className="block">14:02:40 warn p95 /search 2 140 ms</span>
+            <span className="block">14:03:02 info alerte envoyée à #incidents</span>
+          </code>
         </div>
       ),
     },
@@ -410,7 +410,7 @@ function HowItWorks() {
         </Item>
         {stages.map((s) => (
           <Item key={s.name} className={cn('sm:row-start-2', s.span)}>
-            <div className={cn('h-[46vw] overflow-hidden rounded-lg', s.h, s.tone)}>{s.body}</div>
+            <div data-ui className={cn('h-[46vw] overflow-hidden rounded-lg', s.h, s.tone)}>{s.body}</div>
             <div className="mt-4">
               <div className="text-[20px] font-semibold">{s.name}</div>
               <p className="mt-1 max-w-[34ch] text-[16px] text-muted-foreground">{s.text}</p>
@@ -427,7 +427,7 @@ function TypesBand() {
   return (
     <section className="bg-cobalt text-cobalt-ink" style={{ clipPath: 'polygon(0 48px, 48px 0, calc(100% - 48px) 0, 100% 48px, 100% 100%, 0 100%)' }}>
       <div className="mx-auto grid max-w-[1440px] gap-12 px-4 py-[120px] sm:px-8 lg:grid-cols-12 lg:py-[160px]">
-        <Stagger className="lg:col-span-5">
+        <Stagger className="min-w-0 lg:col-span-5">
           <Item>
             <h2 className="text-[clamp(32px,3.6vw,52px)] leading-[1] font-extrabold tracking-[-0.045em]">Pas seulement des chatbots.</h2>
           </Item>
@@ -443,7 +443,7 @@ cd forgeagent && docker compose up
             />
           </Item>
         </Stagger>
-        <Stagger className="lg:col-span-6 lg:col-start-7">
+        <Stagger className="min-w-0 lg:col-span-6 lg:col-start-7">
           <ul className="grid gap-x-8 sm:grid-cols-2">
             {AGENT_TYPE_ORDER.map((t) => (
               <Item as="li" key={t} className="flex items-baseline gap-3 py-3">

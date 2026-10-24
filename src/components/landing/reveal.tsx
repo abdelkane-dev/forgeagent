@@ -32,16 +32,16 @@ export function Item({ children, className, as = 'div' }: { children: ReactNode;
 export function Shutter({ children, className }: { children: ReactNode; className?: string }) {
   const reduce = useReducedMotion()
   if (reduce) return <div className={className}>{children}</div>
+  // The observer sits on an unclipped wrapper: a fully clipped element never reports as intersecting.
   return (
-    <motion.div
-      className={className}
-      initial={{ clipPath: 'inset(0 100% 0 0)' }}
-      whileInView={{ clipPath: 'inset(0 0% 0 0)' }}
-      viewport={{ once: true, amount: 0.35 }}
-      transition={{ duration: 1.1, ease: [0.76, 0, 0.24, 1] }}
-    >
-      <motion.div initial={{ scale: 1.12 }} whileInView={{ scale: 1 }} viewport={{ once: true, amount: 0.35 }} transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }} className="size-full">
-        {children}
+    <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.3 }} className="w-full">
+      <motion.div
+        className={className}
+        variants={{ hidden: { clipPath: 'inset(0 100% 0 0)' }, show: { clipPath: 'inset(0 0% 0 0)', transition: { duration: 1.1, ease: [0.76, 0, 0.24, 1] } } }}
+      >
+        <motion.div variants={{ hidden: { scale: 1.12 }, show: { scale: 1, transition: { duration: 1.4, ease: [0.22, 1, 0.36, 1] } } }} className="size-full">
+          {children}
+        </motion.div>
       </motion.div>
     </motion.div>
   )

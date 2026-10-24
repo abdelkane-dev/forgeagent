@@ -21,7 +21,10 @@ function highlight(code: string): ReactNode[] {
     for (const [re, cls] of RULES) {
       const m = rest.match(re)
       if (m) {
-        if (plain) out.push(<Fragment key={k++}>{plain}</Fragment>), (plain = '')
+        if (plain) {
+          out.push(<Fragment key={k++}>{plain}</Fragment>)
+          plain = ''
+        }
         out.push(
           <span key={k++} className={cls}>
             {m[0]}

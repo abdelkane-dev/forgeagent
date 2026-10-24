@@ -1,4 +1,4 @@
-import type { AgentStatus, LogLevel } from '@/api/types'
+import type { AgentStatus } from '@/api/types'
 import { STATUS } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 
@@ -30,13 +30,6 @@ export function AgentStatus({ status, className }: { status: AgentStatus; classN
       <span className={status === 'error' ? 'text-danger' : status === 'active' ? '' : 'text-muted-foreground'}>{s.label}</span>
     </span>
   )
-}
-
-export const LEVEL_CLASS: Record<LogLevel, string> = {
-  debug: 'text-muted-foreground',
-  info: 'text-foreground',
-  warn: 'text-warn',
-  error: 'text-danger',
 }
 
 export function Tag({ children, className }: { children: React.ReactNode; className?: string }) {
