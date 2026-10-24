@@ -49,7 +49,8 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <UiStateProvider>
-            <BrowserRouter>
+            {/* BASE_URL is "/" locally and "/<repo>/" on GitHub Pages. */}
+            <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
               <ScrollManager />
               <Suspense fallback={<LoadingBlock className="px-6" />}>
                 <Routes>
