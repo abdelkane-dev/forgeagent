@@ -87,3 +87,18 @@ export function useAction<TArgs, TResult>(
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Action impossible'),
   })
 }
+
+/* ---------- Auth & internal team ---------- */
+
+export const useMe = () => useQuery({ queryKey: ['me'], queryFn: api.auth.me, retry: false, staleTime: 60_000 })
+
+export const useTeamAgents = () => useQuery({ queryKey: ['internalTeam', 'agents'], queryFn: api.internalTeam.agents, refetchInterval: 3000 })
+export const useTeamRequests = () => useQuery({ queryKey: ['internalTeam', 'requests'], queryFn: api.internalTeam.requests, refetchInterval: 3000 })
+export const useTeamRequest = (id: ID | null) =>
+  useQuery({
+    queryKey: ['internalTeam', 'request', id],
+    queryFn: () => api.internalTeam.request(id!),
+    enabled: !!id,
+    refetchInterval: (q) => (q.state.data?.request.status === 'running' ? 1000 : false),
+  })
+export const useTeamQueue = () => useQuery({ queryKey: ['internalTeam', 'queue'], queryFn: api.internalTeam.queue, refetchInterval: 3000 })

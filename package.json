@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:demo": "vite --mode demo",
+    "server": "npm --prefix server run dev",
+    "test:server": "npm --prefix server test",
+    "test:e2e": "node scripts/e2e.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

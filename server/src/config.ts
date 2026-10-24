@@ -1,5 +1,8 @@
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
 import { z } from 'zod'
+
+// server/.env first, then the repository's .env (shared with docker compose). Real env vars win.
+loadEnv({ path: ['.env', '../.env'], quiet: true })
 
 /**
  * All configuration comes from the environment and is validated once at boot.

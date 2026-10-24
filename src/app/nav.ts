@@ -1,6 +1,7 @@
 import {
   Activity,
   BookOpen,
+  Bot,
   Boxes,
   Cable,
   ChartColumn,
@@ -56,6 +57,7 @@ export const NAV: { group: string | null; items: NavItem[] }[] = [
     group: 'Opérer',
     items: [
       { to: '/app/observability', label: 'Observabilité', icon: Activity, key: 'o', keywords: 'traces logs' },
+      { to: '/app/internal-team', label: 'Équipe interne', icon: Bot, key: 'e', keywords: 'orchestrateur architecte sécurité testeur superviseur multi-agents' },
       { to: '/app/security', label: 'Sécurité', icon: ShieldCheck, key: 's', keywords: 'garde-fous arrêt validations' },
       { to: '/app/audit', label: 'Journal d’audit', icon: ScrollText, keywords: 'historique' },
       { to: '/app/usage', label: 'Coûts et usage', icon: CircleDollarSign, key: 'u', keywords: 'budget facturation' },

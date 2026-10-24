@@ -1,5 +1,6 @@
 import { Check, Minus, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { api } from '@/api'
 import { keys, useAction, useTeam } from '@/api/hooks'
 import type { Role, TeamMember } from '@/api/types'
@@ -31,7 +32,17 @@ export default function Team() {
   const [role, setRole] = useState<Role>('editor')
   const [err, setErr] = useState('')
   const [del, setDel] = useState<TeamMember | null>(null)
-  const invite = useAction(() => api.team.invite(email, role), { invalidate: [keys.team, keys.audit], success: `Invitation envoyée à ${email}`, onSuccess: () => { setInviteOpen(false); setEmail('') } })
+  const invite = useAction(() => api.team.invite(email, role), {
+    invalidate: [keys.team, keys.audit],
+    onSuccess: async (m) => {
+      setInviteOpen(false)
+      setEmail('')
+      if (m.inviteUrl) {
+        await navigator.clipboard.writeText(m.inviteUrl).catch(() => null)
+        toast.success('Invitation créée : lien copié, transmettez-le au membre', { description: m.inviteUrl, duration: 10_000 })
+      } else toast.success(`Invitation envoyée à ${m.email}`)
+    },
+  })
   const setMemberRole = useAction(({ id, r }: { id: string; r: Role }) => api.team.setRole(id, r), { invalidate: [keys.team], success: (m) => `${m.name} est maintenant ${ROLES[m.role].toLowerCase()}` })
   const remove = useAction((id: string) => api.team.remove(id), { invalidate: [keys.team], success: 'Accès retiré', onSuccess: () => setDel(null) })
 
@@ -64,7 +75,7 @@ export default function Team() {
                     <div className="min-w-0">
                       <div className="text-[14px] font-medium">{m.name}</div>
                       <div className="truncate text-[13px] text-muted-foreground">
-                        {m.email} · actif {relative(m.lastActiveAt)}
+                        {m.email} · {m.invited ? 'invitation en attente' : `actif ${relative(m.lastActiveAt)}`}
                       </div>
                     </div>
                   </div>

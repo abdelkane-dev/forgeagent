@@ -1,7 +1,7 @@
 import { ArrowLeft, Check, Copy, ExternalLink, MoreHorizontal, Pause, Play, Plus, RotateCcw, Send, SquareTerminal, Trash2, Wifi, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
-import { api } from '@/api'
+import { api, isDemo } from '@/api'
 import { keys, useAction, useAgent, useConnectors, useMemories, useProjects, useSkills, useTraces } from '@/api/hooks'
 import type { Agent, Autonomy, ClaudeModel, TriggerKind } from '@/api/types'
 import { KpiStrip, Meter } from '@/components/common/charts'
@@ -22,7 +22,7 @@ import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 import { clock, date, duration, num, pct, relative, usd } from '@/lib/format'
 import { ACTIONS, AGENT_TYPES, AUTONOMY, MODELS, TRIGGERS } from '@/lib/labels'
-import { agentSnippets } from '@/lib/snippets'
+import { agentSnippets, API_HOST } from '@/lib/snippets'
 import { cn } from '@/lib/utils'
 
 const TABS = [
@@ -523,7 +523,21 @@ function ExternalSite({ agent }: { agent: Agent }) {
             if (url) ping.mutate(url)
           }}
         >
-          <Field label="Adresse du site ou de l’application" htmlFor="s-url" hint="Le widget ou le SDK doit être installé sur ce site.">
+          <Field
+            label="Adresse du site ou de l’application"
+            htmlFor="s-url"
+            hint={
+              isDemo ? 'Le widget doit être installé sur ce site.' : (
+                <>
+                  Le widget doit être installé sur ce site. Site de démo local :{' '}
+                  <button type="button" className="underline underline-offset-2" onClick={() => setUrl(`${API_HOST}/demo-site?agent=${agent.id}&key=VOTRE_CLE_PUBLIABLE`)}>
+                    {API_HOST}/demo-site
+                  </button>{' '}
+                  (remplacez la clé, et ajoutez {new URL(API_HOST).host} aux domaines du projet).
+                </>
+              )
+            }
+          >
             <div className="flex gap-2">
               <Input id="s-url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://app.bonaco.pro" required />
               <Button type="submit" disabled={ping.isPending}>

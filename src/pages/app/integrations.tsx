@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { relative } from '@/lib/format'
-import { agentSnippets } from '@/lib/snippets'
+import { agentSnippets, API_HOST } from '@/lib/snippets'
 
 const TABS = [
   ['snippets', 'Code d’intégration'],
@@ -117,19 +117,23 @@ function InProgressApp() {
   const [generated, setGenerated] = useState(false)
   const pid = projectId || projects.data?.[0]?.id || ''
   const slug = projects.data?.find((p) => p.id === pid)?.slug ?? 'bonaco-pro'
-  const code = `// ${fw.join(' · ')} · environnement ${env}
-// npm install @forgeagent/sdk
-import { ForgeAgent } from "@forgeagent/sdk"
+  const code = `// ${fw.join(' · ')} · projet ${slug} · environnement ${env}
+// À appeler depuis votre back-end : la clé ne doit jamais partir dans le navigateur.
+// Clé de test (fa_test_…) en test et préproduction : exécution en bac à sable imposée.
+const FORGE_URL = process.env.FORGE_URL ?? "${API_HOST}"
 
-export const forge = new ForgeAgent({
-  baseUrl: import.meta.env.VITE_FORGE_URL,
-  project: "${slug}",
-  environment: "${env}",
-})
+export async function runAgent(input: string) {
+  const res = await fetch(\`\${FORGE_URL}/v1/agents/${agentId}/run\`, {
+    method: "POST",
+    headers: { Authorization: \`Bearer \${process.env.FORGE_API_KEY}\`, "Content-Type": "application/json" },
+    body: JSON.stringify({ input }),
+  })
+  if (!res.ok) throw new Error((await res.json()).message)
+  return res.json() as Promise<{ content: string; status: string; meta: { cost: number } }>
+}
 
 // Exemple : déléguer une tâche à l’agent depuis votre code
-export const checkErrors = () =>
-  forge.agents.run("${agentId}", { input: "Vérifie les erreurs des 10 dernières minutes" })`
+export const checkErrors = () => runAgent("Vérifie les erreurs des 10 dernières minutes")`
   return (
     <div className="grid gap-8 xl:grid-cols-[1fr_1.2fr]">
       <div className="grid content-start gap-5">
@@ -195,9 +199,15 @@ function Keys() {
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState('')
   const [env, setEnv] = useState<ApiKey['environment']>('test')
+  const [scope, setScope] = useState<'secret' | 'publishable'>('secret')
+  const [keyProject, setKeyProject] = useState('')
+  const projects = useProjects()
   const [secret, setSecret] = useState<string | null>(null)
   const [revoke, setRevoke] = useState<ApiKey | null>(null)
-  const create = useAction(() => api.apiKeys.create(name || 'Nouvelle clé', env), { invalidate: [keys.apiKeys], onSuccess: (r) => setSecret(r.secret) })
+  const create = useAction(
+    () => api.apiKeys.create(name || 'Nouvelle clé', env, { scope, projectId: keyProject || projects.data?.[0]?.id || null }),
+    { invalidate: [keys.apiKeys], onSuccess: (r) => setSecret(r.secret) },
+  )
   const rotate = useAction((id: string) => api.apiKeys.rotate(id), { invalidate: [keys.apiKeys], onSuccess: (r) => setSecret(r.secret) })
   const del = useAction((id: string) => api.apiKeys.revoke(id), { invalidate: [keys.apiKeys], success: 'Clé révoquée', onSuccess: () => setRevoke(null) })
 
@@ -230,7 +240,7 @@ function Keys() {
                       <KeyRound className="size-4 text-muted-foreground" />
                       <div>
                         <div className="text-[14px] font-medium">
-                          {k.name} <Tag className="ml-1">{k.environment === 'live' ? 'Production' : 'Test'}</Tag>
+                          {k.name} <Tag className="ml-1">{k.scope === 'publishable' ? 'Widget (publiable)' : k.environment === 'live' ? 'Production' : 'Test'}</Tag>
                         </div>
                         <div className="text-[13px] text-muted-foreground">
                           <code>{k.prefix}••••••••</code> · créée {relative(k.createdAt)} · utilisée {relative(k.lastUsedAt)}
@@ -278,12 +288,29 @@ function Keys() {
               <Field label="Nom" htmlFor="k-name">
                 <Input id="k-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Worker de facturation" autoFocus />
               </Field>
-              <Field label="Environnement" htmlFor="k-env">
-                <NativeSelect id="k-env" value={env} onChange={(e) => setEnv(e.target.value as ApiKey['environment'])}>
-                  <option value="test">Test</option>
-                  <option value="live">Production</option>
+              <Field label="Type" htmlFor="k-scope" hint={scope === 'publishable' ? 'Pour le widget : visible dans la page, limitée au projet et à ses domaines autorisés.' : 'Pour votre back-end (Bearer). Ne la mettez jamais dans une page web.'}>
+                <NativeSelect id="k-scope" value={scope} onChange={(e) => setScope(e.target.value as 'secret' | 'publishable')}>
+                  <option value="secret">Secrète (serveur à serveur)</option>
+                  <option value="publishable">Publiable (widget)</option>
                 </NativeSelect>
               </Field>
+              <Field label="Projet" htmlFor="k-prj">
+                <NativeSelect id="k-prj" value={keyProject || projects.data?.[0]?.id || ''} onChange={(e) => setKeyProject(e.target.value)}>
+                  {projects.data?.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
+              {scope === 'secret' && (
+                <Field label="Environnement" htmlFor="k-env" hint="Une clé de test impose l’exécution en bac à sable.">
+                  <NativeSelect id="k-env" value={env} onChange={(e) => setEnv(e.target.value as ApiKey['environment'])}>
+                    <option value="test">Test</option>
+                    <option value="live">Production</option>
+                  </NativeSelect>
+                </Field>
+              )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCreateOpen(false)}>
                   Annuler

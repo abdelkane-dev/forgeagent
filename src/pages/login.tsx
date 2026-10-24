@@ -1,5 +1,7 @@
 import { ArrowLeft, Eye, EyeOff, GitBranch } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { api, isDemo } from '@/api'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { LogoMark } from '@/components/brand/logo'
@@ -20,28 +22,44 @@ export default function Login() {
   const navigate = useNavigate()
   const mode = (params.get('mode') as Mode) || 'login'
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(() => params.get('email') ?? '')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [pending, setPending] = useState(false)
   const [sent, setSent] = useState(false)
+  const qc = useQueryClient()
+  const next = params.get('next')
+  const invite = params.get('invite')
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const errs: Record<string, string> = {}
     if (mode === 'signup' && name.trim().length < 2) errs.name = 'Indiquez votre nom.'
     if (!/^\S+@\S+\.\S+$/.test(email)) errs.email = 'Adresse email invalide.'
-    if (mode !== 'reset' && password.length < 8) errs.password = '8 caractères minimum.'
+    if (mode !== 'reset' && password.length < (mode === 'signup' || invite ? 10 : 1)) errs.password = mode === 'signup' || invite ? '10 caractères minimum.' : 'Saisissez votre mot de passe.'
     setErrors(errs)
     if (Object.keys(errs).length) return
     setPending(true)
-    setTimeout(() => {
+    try {
+      if (mode === 'reset') {
+        await api.auth.resetRequest(email)
+        return setSent(true)
+      }
+      const user =
+        invite && mode === 'login'
+          ? await api.auth.acceptInvite(email, invite, password)
+          : mode === 'signup'
+            ? await api.auth.signup(name, email, password)
+            : await api.auth.login(email, password)
+      qc.setQueryData(['me'], user)
+      toast.success(mode === 'signup' ? 'Compte créé, bienvenue' : `Bonjour ${user.name}`)
+      navigate(next && next.startsWith('/app') ? next : '/app')
+    } catch (err) {
+      setErrors({ form: err instanceof Error ? err.message : 'Connexion impossible' })
+    } finally {
       setPending(false)
-      if (mode === 'reset') return setSent(true)
-      toast.success(mode === 'login' ? 'Connecté' : 'Compte créé, bienvenue')
-      navigate('/app')
-    }, 700)
+    }
   }
 
   return (
@@ -104,6 +122,12 @@ export default function Login() {
                   </div>
                 </Field>
               )}
+              {errors.form && (
+                <p role="alert" className="rounded-md bg-danger/12 px-3 py-2 text-[14px] text-danger">
+                  {errors.form}
+                </p>
+              )}
+              {invite && <p className="text-[14px] text-muted-foreground">Invitation : choisissez votre mot de passe pour activer votre compte.</p>}
               <Button type="submit" size="lg" disabled={pending} className="mt-1">
                 {pending ? <HexLoader /> : mode === 'signup' ? 'Créer mon compte' : mode === 'reset' ? 'Envoyer le lien' : 'Se connecter'}
               </Button>
@@ -125,7 +149,13 @@ export default function Login() {
             </form>
           )}
           <p className="mt-10 text-[14px] text-muted-foreground">
-            Juste curieux ? <Link to="/app" className="font-semibold text-foreground underline underline-offset-4">Ouvrez la console en mode démo</Link>.
+            {isDemo ? (
+              <>
+                Mode démo : <Link to="/app" className="font-semibold text-foreground underline underline-offset-4">ouvrez la console</Link> sans compte.
+              </>
+            ) : (
+              <>Comptes de démonstration : abdoul@bonaco.pro (admin), ines@bonaco.pro (éditeur), theo@bonaco.pro (lecteur).</>
+            )}
           </p>
         </main>
       </div>

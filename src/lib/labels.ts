@@ -79,6 +79,7 @@ export const ACTIONS = [
   'Redémarrer un service',
   'Envoyer un email groupé',
   'Écrire en base de données',
+  'Agir sur le site externe',
 ]
 
 export const INTEGRATIONS: Record<IntegrationChannel, { label: string; hint: string }> = {

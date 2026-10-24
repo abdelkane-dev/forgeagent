@@ -32,6 +32,7 @@ const Usage = lazy(() => import('@/pages/app/usage'))
 const Team = lazy(() => import('@/pages/app/team'))
 const SettingsPage = lazy(() => import('@/pages/app/settings'))
 const Notifications = lazy(() => import('@/pages/app/notifications'))
+const InternalTeam = lazy(() => import('@/pages/app/internal-team'))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: false } },
@@ -85,6 +86,7 @@ export default function App() {
                     <Route path="team" element={<Team />} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="notifications" element={<Notifications />} />
+                    <Route path="internal-team" element={<InternalTeam />} />
                     <Route path="*" element={<NotFound inApp />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />

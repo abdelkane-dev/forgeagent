@@ -20,7 +20,7 @@ function Documents() {
   const [url, setUrl] = useState('')
   const [del, setDel] = useState<KnowledgeDoc | null>(null)
   const file = useRef<HTMLInputElement>(null)
-  const add = useAction((d: Pick<KnowledgeDoc, 'name' | 'kind'>) => api.knowledge.add(d), { invalidate: [keys.knowledge], success: (d) => `Indexation de ${d.name} lancée`, onSuccess: () => setUrl('') })
+  const add = useAction((d: Pick<KnowledgeDoc, 'name' | 'kind'> & { content?: string }) => api.knowledge.add(d), { invalidate: [keys.knowledge], success: (d) => `Indexation de ${d.name} lancée`, onSuccess: () => setUrl('') })
   const remove = useAction((id: string) => api.knowledge.remove(id), { invalidate: [keys.knowledge], success: 'Source retirée', onSuccess: () => setDel(null) })
 
   return (
@@ -49,11 +49,13 @@ function Documents() {
           accept=".pdf,.docx,.md,.txt"
           className="sr-only"
           aria-label="Importer un fichier"
-          onChange={(e) => {
+          onChange={async (e) => {
             const f = e.target.files?.[0]
             if (!f) return
             const ext = f.name.split('.').pop()?.toLowerCase()
-            add.mutate({ name: f.name, kind: ext === 'pdf' ? 'pdf' : ext === 'docx' ? 'docx' : 'markdown' })
+            // Text formats are sent as text; PDF and Word need server-side extraction.
+            const content = ext === 'md' || ext === 'txt' ? (await f.text()).slice(0, 200_000) : undefined
+            add.mutate({ name: f.name, kind: ext === 'pdf' ? 'pdf' : ext === 'docx' ? 'docx' : 'markdown', content })
             e.target.value = ''
           }}
         />
@@ -78,7 +80,7 @@ function Documents() {
                   <div className="flex items-center gap-3">
                     <span className="flex items-center gap-2 text-[13.5px]">
                       {d.status === 'indexing' ? <HexLoader /> : <StatusDot tone={d.status === 'indexed' ? 'ok' : 'danger'} />}
-                      {d.status === 'indexed' ? 'Indexé' : d.status === 'indexing' ? 'Indexation…' : 'Échec'}
+                      <span title={d.error ?? undefined}>{d.status === 'indexed' ? 'Indexé' : d.status === 'indexing' ? 'Indexation…' : 'Échec'}</span>
                     </span>
                     <Button variant="ghost" size="icon-sm" aria-label={`Retirer ${d.name}`} onClick={() => setDel(d)}>
                       <Trash2 />

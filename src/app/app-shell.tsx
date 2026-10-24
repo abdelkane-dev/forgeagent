@@ -1,9 +1,10 @@
-import { Bell, Menu, Moon, Search, ShieldAlert, Sun } from 'lucide-react'
+import { Bell, LogOut, Menu, Moon, Search, ShieldAlert, Sun } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Suspense, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router'
-import { isDemo } from '@/api'
-import { useNotifications, useSettings } from '@/api/hooks'
+import { useQueryClient } from '@tanstack/react-query'
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { api, isDemo } from '@/api'
+import { useMe, useNotifications, useSettings } from '@/api/hooks'
 import { LogoMark } from '@/components/brand/logo'
 import { LinkButton } from '@/components/common/link-button'
 import { Kbd } from '@/components/common/page'
@@ -11,6 +12,7 @@ import { LoadingBlock } from '@/components/common/states'
 import { StatusDot } from '@/components/common/status'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { ROLES } from '@/lib/labels'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { CommandPalette } from './command-palette'
@@ -81,6 +83,9 @@ function SidebarTop() {
 function SidebarBottom() {
   const { resolved, toggle } = useTheme()
   const settings = useSettings()
+  const me = useMe()
+  const qc = useQueryClient()
+  const navigate = useNavigate()
   const kill = settings.data?.killSwitch
   return (
     <div className="grid gap-2 pt-4">
@@ -89,19 +94,43 @@ function SidebarBottom() {
           <StatusDot tone={kill ? 'danger' : 'ok'} pulse={!kill} />
           {kill ? 'Arrêt d’urgence actif' : isDemo ? 'Mode démo · données fictives' : 'Instance connectée'}
         </div>
-        <div className="mt-1 text-muted-foreground">Claude Sonnet 5.5 · file d’attente 0</div>
+        <div className="mt-1 text-muted-foreground">{isDemo ? 'Aucun back-end branché' : 'API ForgeAgent · Claude'}</div>
       </div>
-      <div className="flex items-center justify-between gap-2 px-1">
+      <div className="flex items-center justify-between gap-1 px-1">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="hex flex size-7 shrink-0 items-center justify-center bg-foreground text-[11px] font-bold text-background">AK</span>
+          <span className="hex flex size-7 shrink-0 items-center justify-center bg-foreground text-[11px] font-bold text-background">
+            {(me.data?.name ?? '?')
+              .split(' ')
+              .map((x) => x[0])
+              .join('')
+              .slice(0, 2)
+              .toUpperCase()}
+          </span>
           <div className="min-w-0 text-[13px] leading-tight">
-            <div className="truncate font-medium">Abdoul Karim</div>
-            <div className="text-muted-foreground">Administrateur</div>
+            <div className="truncate font-medium">{me.data?.name ?? '…'}</div>
+            <div className="text-muted-foreground">{me.data ? ROLES[me.data.role] : ''}</div>
           </div>
         </div>
-        <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={`Passer en thème ${resolved === 'dark' ? 'clair' : 'sombre'}`} className="text-muted-foreground">
-          {resolved === 'dark' ? <Sun /> : <Moon />}
-        </Button>
+        <div className="flex">
+          <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={`Passer en thème ${resolved === 'dark' ? 'clair' : 'sombre'}`} className="text-muted-foreground">
+            {resolved === 'dark' ? <Sun /> : <Moon />}
+          </Button>
+          {!isDemo && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Se déconnecter"
+              className="text-muted-foreground"
+              onClick={async () => {
+                await api.auth.logout().catch(() => null)
+                qc.clear()
+                navigate('/login')
+              }}
+            >
+              <LogOut />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -113,7 +142,12 @@ export function AppShell() {
   const reduce = useReducedMotion()
   const [menuOpen, setMenuOpen] = useState(false)
   const settings = useSettings()
+  const me = useMe()
   const current = NAV.flatMap((g) => g.items).find((n) => location.pathname === n.to) ?? null
+
+  // Real back-end: the console requires a session. Demo mode always has one.
+  if (!isDemo && me.isPending) return <LoadingBlock className="px-6" label="Vérification de la session…" />
+  if (!isDemo && me.isError) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />
 
   return (
     <div className="min-h-svh bg-background">

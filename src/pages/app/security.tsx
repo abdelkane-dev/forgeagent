@@ -75,7 +75,7 @@ export default function Security() {
                     <div className="min-w-0">
                       <div className="text-[15px] font-medium">{ap.action}</div>
                       <div className="mt-0.5 text-[13.5px] text-muted-foreground">
-                        {name(ap.agentId)} · {ap.reason} · {relative(ap.requestedAt)} · <span className={RISK[ap.risk].cls}>{RISK[ap.risk].label}</span>
+                        {ap.source === 'team' ? 'Équipe interne' : name(ap.agentId)} · {ap.reason} · {relative(ap.requestedAt)} · <span className={RISK[ap.risk].cls}>{RISK[ap.risk].label}</span>
                       </div>
                     </div>
                     <div className="flex shrink-0 gap-2">

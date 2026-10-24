@@ -26,3 +26,11 @@ export async function settle(requestId: string) {
   }
   throw new Error('request did not settle')
 }
+
+declare global {
+  // Tests read loosely-typed JSON bodies; the routes' own types are checked in src/.
+  interface Response {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    json(): Promise<any>
+  }
+}
