@@ -580,3 +580,34 @@ export interface AdminAgentRow {
   members: number
   createdAt: ISODate
 }
+
+/** Platform account, as the platform admin sees it. */
+export interface AdminUser {
+  id: ID
+  name: string
+  email: string
+  platformRole: PlatformRole
+  invited: boolean
+  lastActiveAt: ISODate
+}
+
+export interface PlatformAuditEntry {
+  id: ID
+  at: ISODate
+  actor: string
+  action: string
+  target: string
+}
+
+export interface AgentDocs {
+  current: AgentDoc | null
+  history: { version: number; generatedAt: ISODate }[]
+}
+
+export interface IntegrationInput {
+  kind: AgentIntegration['kind']
+  name: string
+  url: string
+  environment: 'test' | 'production'
+  secretName?: string | null
+}

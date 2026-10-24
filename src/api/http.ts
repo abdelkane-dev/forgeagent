@@ -1,6 +1,8 @@
 import { ApiError, type ForgeApi } from './client'
 import type { LogEntry } from './types'
 
+const A = (id: string) => `/agents/${encodeURIComponent(id)}`
+
 /**
  * REST implementation of ForgeApi. Every path is relative to VITE_API_URL
  * (e.g. http://localhost:8787) and versioned under /v1. Auth uses the session
@@ -38,6 +40,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 const get = <T,>(p: string) => request<T>('GET', p)
 const post = <T,>(p: string, b?: unknown) => request<T>('POST', p, b ?? {})
 const patch = <T,>(p: string, b: unknown) => request<T>('PATCH', p, b)
+const put = <T,>(p: string, b: unknown) => request<T>('PUT', p, b)
 const del = (p: string) => request<void>('DELETE', p)
 const qs = (o: Record<string, string | undefined> = {}) => {
   const s = new URLSearchParams(Object.entries(o).filter((e): e is [string, string] => !!e[1])).toString()
@@ -54,16 +57,105 @@ export const httpApi: ForgeApi = {
     logout: () => post('/auth/logout'),
   },
   overview: { get: () => get('/overview') },
+  approvals: {
+    mine: () => get('/approvals'),
+    list: (id) => get(`${A(id)}/approvals`),
+    resolve: (id, approvalId, decision) => post(`${A(id)}/approvals/${approvalId}/${decision}`),
+  },
   agents: {
     list: () => get('/agents'),
-    get: (id) => get(`/agents/${id}`),
+    get: (id) => get(A(id)),
     create: (draft) => post('/agents', draft),
-    update: (id, p, note) => patch(`/agents/${id}`, { ...p, versionNote: note }),
-    remove: (id) => del(`/agents/${id}`),
-    restoreVersion: (id, version) => post(`/agents/${id}/versions/${version}/restore`),
-    duplicate: (id, projectId) => post(`/agents/${id}/duplicate`, { projectId }),
-    pingSite: (id, url) => post(`/agents/${id}/site/ping`, { url }),
-    sendToSite: (id, event) => post(`/agents/${id}/site/events`, { event }),
+    update: (id, p, note) => patch(A(id), { ...p, ...(note ? { versionNote: note } : {}) }),
+    setStatus: (id, status) => post(`${A(id)}/status`, { status }),
+    restoreVersion: (id, version) => post(`${A(id)}/versions/${version}/restore`),
+    duplicate: (id) => post(`${A(id)}/duplicate`),
+    exportData: (id) => get(`${A(id)}/export`),
+    remove: (id) => del(A(id)),
+  },
+  runtime: {
+    send: (id, input, history, environment = 'test') =>
+      post(`${A(id)}/run`, { input, environment, history: history.filter((m) => m.role !== 'system').map((m) => ({ role: m.role, content: m.content })) }),
+    checks: (id) => post(`${A(id)}/checks`),
+  },
+  members: {
+    list: (id) => get(`${A(id)}/members`),
+    add: (id, email, role) => post(`${A(id)}/members`, { email, role }),
+    setRole: (id, userId, role) => patch(`${A(id)}/members/${userId}`, { role }),
+    remove: (id, userId) => del(`${A(id)}/members/${userId}`),
+  },
+  keys: {
+    list: (id) => get(`${A(id)}/keys`),
+    create: (id, name, environment, scope) => post(`${A(id)}/keys`, { name, environment, scope }),
+    rotate: (id, keyId) => post(`${A(id)}/keys/${keyId}/rotate`),
+    revoke: (id, keyId) => del(`${A(id)}/keys/${keyId}`),
+  },
+  secrets: {
+    list: (id) => get(`${A(id)}/secrets`),
+    put: (id, name, value) => put(`${A(id)}/secrets`, { name, value }),
+    remove: (id, name) => del(`${A(id)}/secrets/${encodeURIComponent(name)}`),
+  },
+  integrations: {
+    list: (id) => get(`${A(id)}/integrations`),
+    create: (id, input) => post(`${A(id)}/integrations`, input),
+    remove: (id, iid) => del(`${A(id)}/integrations/${iid}`),
+    check: (id, iid) => post(`${A(id)}/integrations/${iid}/check`),
+    sendEvent: (id, event) => post(`${A(id)}/site/events`, { event }),
+  },
+  webhooks: {
+    list: (id) => get(`${A(id)}/webhooks`),
+    create: (id, url, events) => post(`${A(id)}/webhooks`, { url, events }),
+    remove: (id, wid) => del(`${A(id)}/webhooks/${wid}`),
+    test: (id, wid) => post(`${A(id)}/webhooks/${wid}/test`),
+  },
+  knowledge: {
+    list: (id) => get(`${A(id)}/knowledge`),
+    add: (id, input) => post(`${A(id)}/knowledge`, input),
+    remove: (id, docId) => del(`${A(id)}/knowledge/${docId}`),
+    search: (id, q) => get(`${A(id)}/knowledge/search${qs({ q })}`),
+  },
+  memories: {
+    list: (id) => get(`${A(id)}/memories`),
+    add: (id, text) => post(`${A(id)}/memories`, { text }),
+    remove: (id, mid) => del(`${A(id)}/memories/${mid}`),
+    clear: (id) => del(`${A(id)}/memories`),
+  },
+  evals: {
+    suites: (id) => get(`${A(id)}/evals`),
+    createSuite: (id, input) => post(`${A(id)}/evals`, input),
+    removeSuite: (id, suiteId) => del(`${A(id)}/evals/${suiteId}`),
+    cases: (id, suiteId) => get(`${A(id)}/evals/${suiteId}/cases`),
+    addCase: (id, suiteId, input, expect) => post(`${A(id)}/evals/${suiteId}/cases`, { input, expect }),
+    run: (id, suiteId) => post(`${A(id)}/evals/${suiteId}/run`),
+    runs: (id, suiteId) => get(`${A(id)}/evals/runs${qs({ suiteId })}`),
+  },
+  workflows: {
+    list: (id) => get(`${A(id)}/workflows`),
+    save: (id, wf) => put(`${A(id)}/workflows`, wf),
+    remove: (id, wid) => del(`${A(id)}/workflows/${wid}`),
+    run: (id, wid, input, test) => post(`${A(id)}/workflows/${wid}/run`, { input, test }),
+    runs: (id, workflowId) => get(`${A(id)}/workflows/runs${qs({ workflowId })}`),
+  },
+  audit: { list: (id) => get(`${A(id)}/audit`) },
+  usage: { get: (id) => get(`${A(id)}/usage`) },
+  docs: { get: (id) => get(`${A(id)}/docs`), regenerate: (id) => post(`${A(id)}/docs`) },
+  logs: {
+    list: (id, f) => get(`${A(id)}/logs${qs({ level: f?.level, environment: f?.environment })}`),
+    subscribe: (id, onEntry) => {
+      // Server-Sent Events on this agent's own channel: one JSON LogEntry per message.
+      const es = new EventSource(`${BASE}/v1${A(id)}/logs/stream`, { withCredentials: true })
+      es.onmessage = (ev) => onEntry(JSON.parse(ev.data) as LogEntry)
+      return () => es.close()
+    },
+  },
+  traces: { list: (id) => get(`${A(id)}/traces`), get: (id, tid) => get(`${A(id)}/traces/${tid}`) },
+  forge: {
+    agents: () => get('/forge/agents'),
+    requests: () => get('/forge/requests'),
+    agentRequests: (id) => get(`${A(id)}/forge/requests`),
+    request: (id, requestId) => get(`${A(id)}/forge/requests/${requestId}`),
+    create: (input) => post('/forge/requests', input),
+    supervise: (id) => post(`${A(id)}/forge/supervise`),
   },
   projects: {
     list: () => get('/projects'),
@@ -72,93 +164,21 @@ export const httpApi: ForgeApi = {
     update: (id, p) => patch(`/projects/${id}`, p),
     remove: (id) => del(`/projects/${id}`),
   },
-  skills: {
-    list: () => get('/skills'),
-    create: (input) => post('/skills', input),
-    remove: (id) => del(`/skills/${id}`),
-  },
-  connectors: {
-    list: () => get('/connectors'),
-    toggle: (id, enabled) => patch(`/connectors/${id}`, { enabled }),
-  },
-  traces: {
-    list: (f) => get(`/traces${qs({ agentId: f?.agentId })}`),
-    get: (id) => get(`/traces/${id}`),
-  },
-  logs: {
-    list: (f) => get(`/logs${qs({ agentId: f?.agentId, level: f?.level })}`),
-    subscribe: (onEntry, f) => {
-      // Server-Sent Events: one JSON LogEntry per message.
-      const es = new EventSource(`${BASE}/v1/logs/stream${qs({ agentId: f?.agentId })}`, { withCredentials: true })
-      es.onmessage = (ev) => onEntry(JSON.parse(ev.data) as LogEntry)
-      return () => es.close()
-    },
-  },
-  approvals: {
-    list: () => get('/approvals'),
-    resolve: (id, decision) => post(`/approvals/${id}/${decision}`),
-  },
-  audit: { list: () => get('/audit') },
-  evals: { list: () => get('/evals'), run: (id) => post(`/evals/${id}/run`) },
-  knowledge: {
-    list: () => get('/knowledge'),
-    add: (input) => post('/knowledge', input),
-    remove: (id) => del(`/knowledge/${id}`),
-  },
-  memories: {
-    list: (agentId) => get(`/memories${qs({ agentId })}`),
-    remove: (id) => del(`/memories/${id}`),
-    clear: (agentId) => del(`/agents/${agentId}/memories`),
-  },
+  skills: { list: () => get('/skills'), create: (input) => post('/skills', input), remove: (id) => del(`/skills/${id}`) },
+  connectors: { list: () => get('/connectors'), toggle: (id, enabled) => patch(`/connectors/${id}`, { enabled }) },
   templates: { list: () => get('/templates') },
-  team: {
-    list: () => get('/team'),
-    invite: (email, role) => post('/team/invitations', { email, role }),
-    setRole: (id, role) => patch(`/team/${id}`, { role }),
-    remove: (id) => del(`/team/${id}`),
-  },
-  apiKeys: {
-    list: () => get('/api-keys'),
-    create: (name, environment, opts) => post('/api-keys', { name, environment, scope: opts?.scope ?? 'secret', projectId: opts?.projectId ?? null }),
-    rotate: (id) => post(`/api-keys/${id}/rotate`),
-    revoke: (id) => del(`/api-keys/${id}`),
-  },
-  webhooks: {
-    list: () => get('/webhooks'),
-    create: (url, events) => post('/webhooks', { url, events }),
-    remove: (id) => del(`/webhooks/${id}`),
-    test: (id) => post(`/webhooks/${id}/test`),
-  },
   notifications: {
     list: () => get('/notifications'),
     markRead: (id) => post(`/notifications/${id}/read`),
     markAllRead: () => post('/notifications/read-all'),
   },
-  workflows: {
-    list: () => get('/workflows'),
-    save: (wf) => request('PUT', `/workflows/${wf.id}`, wf),
-  },
-  delegations: {
-    list: () => get('/delegations'),
-    create: (fromAgentId, toAgentId) => post('/delegations', { fromAgentId, toAgentId }),
-    toggle: (id, enabled) => patch(`/delegations/${id}`, { enabled }),
-  },
-  schedules: {
-    list: () => get('/schedules'),
-    create: (agentId, cron, label) => post('/schedules', { agentId, cron, label }),
-    toggle: (id, enabled) => patch(`/schedules/${id}`, { enabled }),
-  },
-  settings: { get: () => get('/settings'), update: (p) => patch('/settings', p) },
-  internalTeam: {
-    agents: () => get('/internal-team/agents'),
-    requests: () => get('/internal-team/requests'),
-    request: (id) => get(`/internal-team/requests/${id}`),
-    create: (input) => post('/internal-team/requests', input),
-    sweep: () => post('/internal-team/sweep'),
-    queue: () => get('/internal-team/queue'),
-  },
-  playground: {
-    send: (agentId, input, history) => post(`/agents/${agentId}/run`, { input, history, sandbox: true }),
-    checks: (agentId) => post(`/agents/${agentId}/checks`),
+  platform: { settings: () => get('/platform/settings'), updateSettings: (p) => patch('/platform/settings', p) },
+  admin: {
+    users: () => get('/admin/users'),
+    invite: (email, platformRole) => post('/admin/users', { email, platformRole }),
+    setRole: (id, platformRole) => patch(`/admin/users/${id}`, { platformRole }),
+    removeUser: (id) => del(`/admin/users/${id}`),
+    agents: () => get('/admin/agents'),
+    audit: () => get('/admin/audit'),
   },
 }

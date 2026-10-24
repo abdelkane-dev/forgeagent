@@ -1,44 +1,56 @@
 import type {
+  AdminAgentRow,
+  AdminUser,
   Agent,
+  AgentDocs,
   AgentDraft,
+  AgentIntegration,
+  AgentMember,
+  AgentRole,
+  AgentSecret,
+  AgentStatus,
   ApiKey,
   Approval,
   AuditEntry,
   ChatMessage,
   CheckResult,
   Connector,
-  Delegation,
+  CreateAgentRequestInput,
+  EvalCase,
+  EvalRun,
   EvalSuite,
-  ExternalSite,
   ID,
+  IntegrationInput,
   KnowledgeDoc,
+  KnowledgeHit,
   LogEntry,
   LogLevel,
   MemoryItem,
   Notification,
   Overview,
+  PlatformAuditEntry,
+  PlatformRole,
+  PlatformSettings,
   Project,
-  Role,
-  Schedule,
-  Settings,
   Skill,
-  TeamMember,
-  Template,
-  Trace,
-  Webhook,
-  Workflow,
-  User,
   TeamAgentInfo,
+  TeamEvent,
   TeamRequest,
   TeamTask,
-  TeamEvent,
-  CreateAgentRequestInput,
+  Template,
+  Trace,
+  UsageSummary,
+  User,
+  Webhook,
+  Workflow,
+  WorkflowRun,
 } from './types'
 
 /**
  * The single contract between the UI and any back-end.
- * `mock.ts` implements it in memory; `http.ts` implements it over REST.
- * Swap with VITE_API_URL (see src/api/index.ts).
+ * `mock/` implements it in memory; `http.ts` implements it over REST, one method per route.
+ * Every agent-scoped method takes the agent id first: it maps to /v1/agents/:agentId/…,
+ * and a user who is not a member of that agent gets "Agent introuvable".
  */
 export interface ForgeApi {
   auth: {
@@ -49,25 +61,112 @@ export interface ForgeApi {
     resetRequest(email: string): Promise<void>
     logout(): Promise<void>
   }
+  /** Dashboard of MY agents only. */
   overview: { get(): Promise<Overview> }
+  /** Pending approvals across my agents. */
+  approvals: {
+    mine(): Promise<Approval[]>
+    list(agentId: ID): Promise<Approval[]>
+    resolve(agentId: ID, id: ID, decision: 'approve' | 'reject'): Promise<void>
+  }
   agents: {
     list(): Promise<Agent[]>
-    get(id: ID): Promise<Agent>
+    get(agentId: ID): Promise<Agent>
     create(draft: AgentDraft): Promise<Agent>
-    update(id: ID, patch: Partial<Agent>, note?: string): Promise<Agent>
-    remove(id: ID): Promise<void>
-    restoreVersion(id: ID, version: number): Promise<Agent>
-    duplicate(id: ID, projectId: ID): Promise<Agent>
-    /** Checks that the external site answers and that the widget/SDK is installed. */
-    pingSite(id: ID, url: string): Promise<ExternalSite>
-    /** Sends a test event from the agent to the external site (e.g. a DOM action, an API call). */
-    sendToSite(id: ID, event: string): Promise<{ ok: boolean; latencyMs: number; response: string }>
+    /** With a note: regression suites are replayed first, then a new version is published. */
+    update(agentId: ID, patch: Partial<AgentDraft>, note?: string): Promise<Agent>
+    setStatus(agentId: ID, status: AgentStatus): Promise<Agent>
+    restoreVersion(agentId: ID, version: number): Promise<Agent>
+    duplicate(agentId: ID): Promise<Agent>
+    exportData(agentId: ID): Promise<Record<string, unknown>>
+    /** Purge: database rows, vectors, files and secrets. Owner only. */
+    remove(agentId: ID): Promise<void>
+  }
+  runtime: {
+    send(agentId: ID, input: string, history: ChatMessage[], environment?: 'test' | 'production'): Promise<ChatMessage & { runId?: ID; status?: string }>
+    checks(agentId: ID): Promise<CheckResult[]>
+  }
+  members: {
+    list(agentId: ID): Promise<AgentMember[]>
+    add(agentId: ID, email: string, role: AgentRole): Promise<{ member: AgentMember; inviteUrl?: string }>
+    setRole(agentId: ID, userId: ID, role: AgentRole): Promise<void>
+    remove(agentId: ID, userId: ID): Promise<void>
+  }
+  keys: {
+    list(agentId: ID): Promise<ApiKey[]>
+    /** The full secret is returned once, at creation or rotation. */
+    create(agentId: ID, name: string, environment: ApiKey['environment'], scope: ApiKey['scope']): Promise<{ key: ApiKey; secret: string }>
+    rotate(agentId: ID, keyId: ID): Promise<{ key: ApiKey; secret: string }>
+    revoke(agentId: ID, keyId: ID): Promise<void>
+  }
+  secrets: {
+    list(agentId: ID): Promise<AgentSecret[]>
+    put(agentId: ID, name: string, value: string): Promise<AgentSecret>
+    remove(agentId: ID, name: string): Promise<void>
+  }
+  integrations: {
+    list(agentId: ID): Promise<AgentIntegration[]>
+    create(agentId: ID, input: IntegrationInput): Promise<AgentIntegration>
+    remove(agentId: ID, id: ID): Promise<void>
+    check(agentId: ID, id: ID): Promise<AgentIntegration>
+    sendEvent(agentId: ID, event: string): Promise<{ ok: boolean; latencyMs: number; response: string }>
+  }
+  webhooks: {
+    list(agentId: ID): Promise<Webhook[]>
+    create(agentId: ID, url: string, events: string[]): Promise<Webhook & { signingSecret?: string }>
+    remove(agentId: ID, id: ID): Promise<void>
+    test(agentId: ID, id: ID): Promise<{ status: number; latencyMs: number }>
+  }
+  knowledge: {
+    list(agentId: ID): Promise<KnowledgeDoc[]>
+    add(agentId: ID, input: { name: string; kind: KnowledgeDoc['kind']; content?: string; file?: string }): Promise<KnowledgeDoc>
+    remove(agentId: ID, id: ID): Promise<void>
+    search(agentId: ID, q: string): Promise<KnowledgeHit[]>
+  }
+  memories: {
+    list(agentId: ID): Promise<MemoryItem[]>
+    add(agentId: ID, text: string): Promise<MemoryItem>
+    remove(agentId: ID, id: ID): Promise<void>
+    clear(agentId: ID): Promise<void>
+  }
+  evals: {
+    suites(agentId: ID): Promise<EvalSuite[]>
+    createSuite(agentId: ID, input: { name: string; regression: boolean; cases: { input: string; expect: string }[] }): Promise<EvalSuite>
+    removeSuite(agentId: ID, suiteId: ID): Promise<void>
+    cases(agentId: ID, suiteId: ID): Promise<EvalCase[]>
+    addCase(agentId: ID, suiteId: ID, input: string, expect: string): Promise<EvalCase>
+    run(agentId: ID, suiteId: ID): Promise<EvalRun>
+    runs(agentId: ID, suiteId?: ID): Promise<EvalRun[]>
+  }
+  workflows: {
+    list(agentId: ID): Promise<Workflow[]>
+    save(agentId: ID, wf: Omit<Workflow, 'id' | 'agentId' | 'version' | 'updatedAt'> & { id?: ID }): Promise<Workflow>
+    remove(agentId: ID, id: ID): Promise<void>
+    run(agentId: ID, id: ID, input: string, test: boolean): Promise<{ runId: ID }>
+    runs(agentId: ID, workflowId?: ID): Promise<WorkflowRun[]>
+  }
+  audit: { list(agentId: ID): Promise<AuditEntry[]> }
+  usage: { get(agentId: ID): Promise<UsageSummary> }
+  docs: { get(agentId: ID): Promise<AgentDocs>; regenerate(agentId: ID): Promise<AgentDocs> }
+  logs: {
+    list(agentId: ID, filter?: { level?: LogLevel; environment?: 'test' | 'production' }): Promise<LogEntry[]>
+    /** Live tail of ONE agent. Returns an unsubscribe function. */
+    subscribe(agentId: ID, onEntry: (e: LogEntry) => void): () => void
+  }
+  traces: { list(agentId: ID): Promise<Trace[]>; get(agentId: ID, id: ID): Promise<Trace> }
+  forge: {
+    agents(): Promise<TeamAgentInfo[]>
+    requests(): Promise<TeamRequest[]>
+    agentRequests(agentId: ID): Promise<TeamRequest[]>
+    request(agentId: ID, requestId: ID): Promise<{ request: TeamRequest; tasks: TeamTask[]; events: TeamEvent[] }>
+    create(input: CreateAgentRequestInput): Promise<TeamRequest>
+    supervise(agentId: ID): Promise<{ requestId: ID }>
   }
   projects: {
     list(): Promise<Project[]>
     get(id: ID): Promise<Project>
     create(input: Pick<Project, 'name' | 'description'>): Promise<Project>
-    update(id: ID, patch: Partial<Project>): Promise<Project>
+    update(id: ID, patch: Partial<Pick<Project, 'name' | 'description' | 'stack' | 'environments'>>): Promise<Project>
     remove(id: ID): Promise<void>
   }
   skills: {
@@ -76,65 +175,20 @@ export interface ForgeApi {
     remove(id: ID): Promise<void>
   }
   connectors: { list(): Promise<Connector[]>; toggle(id: ID, enabled: boolean): Promise<Connector> }
-  traces: { list(filter?: { agentId?: ID }): Promise<Trace[]>; get(id: ID): Promise<Trace> }
-  logs: {
-    list(filter?: { agentId?: ID; level?: LogLevel }): Promise<LogEntry[]>
-    /** Live tail. Returns an unsubscribe function. */
-    subscribe(onEntry: (e: LogEntry) => void, filter?: { agentId?: ID }): () => void
-  }
-  approvals: { list(): Promise<Approval[]>; resolve(id: ID, decision: 'approve' | 'reject'): Promise<void> }
-  audit: { list(): Promise<AuditEntry[]> }
-  evals: { list(): Promise<EvalSuite[]>; run(id: ID): Promise<EvalSuite> }
-  knowledge: {
-    list(): Promise<KnowledgeDoc[]>
-    add(input: Pick<KnowledgeDoc, 'name' | 'kind'> & { content?: string }): Promise<KnowledgeDoc>
-    remove(id: ID): Promise<void>
-  }
-  memories: { list(agentId?: ID): Promise<MemoryItem[]>; remove(id: ID): Promise<void>; clear(agentId: ID): Promise<void> }
   templates: { list(): Promise<Template[]> }
-  team: {
-    list(): Promise<TeamMember[]>
-    invite(email: string, role: Role): Promise<TeamMember>
-    setRole(id: ID, role: Role): Promise<TeamMember>
-    remove(id: ID): Promise<void>
-  }
-  apiKeys: {
-    list(): Promise<ApiKey[]>
-    /** The full secret is returned once, at creation or rotation. */
-    create(name: string, environment: ApiKey['environment'], opts?: { scope?: 'secret' | 'publishable'; projectId?: ID | null }): Promise<{ key: ApiKey; secret: string }>
-    rotate(id: ID): Promise<{ key: ApiKey; secret: string }>
-    revoke(id: ID): Promise<void>
-  }
-  webhooks: {
-    list(): Promise<Webhook[]>
-    create(url: string, events: string[]): Promise<Webhook & { signingSecret?: string }>
-    remove(id: ID): Promise<void>
-    test(id: ID): Promise<{ status: number; latencyMs: number }>
-  }
   notifications: { list(): Promise<Notification[]>; markRead(id: ID): Promise<void>; markAllRead(): Promise<void> }
-  workflows: { list(): Promise<Workflow[]>; save(wf: Workflow): Promise<Workflow> }
-  delegations: {
-    list(): Promise<Delegation[]>
-    create(fromAgentId: ID, toAgentId: ID): Promise<Delegation>
-    toggle(id: ID, enabled: boolean): Promise<Delegation>
+  platform: {
+    settings(): Promise<PlatformSettings>
+    updateSettings(patch: Partial<PlatformSettings>): Promise<PlatformSettings>
   }
-  schedules: {
-    list(): Promise<Schedule[]>
-    create(agentId: ID, cron: string, label: string): Promise<Schedule>
-    toggle(id: ID, enabled: boolean): Promise<Schedule>
-  }
-  settings: { get(): Promise<Settings>; update(patch: Partial<Settings>): Promise<Settings> }
-  internalTeam: {
-    agents(): Promise<TeamAgentInfo[]>
-    requests(): Promise<TeamRequest[]>
-    request(id: ID): Promise<{ request: TeamRequest; tasks: TeamTask[]; events: TeamEvent[] }>
-    create(input: CreateAgentRequestInput): Promise<TeamRequest>
-    sweep(): Promise<{ requestId: ID | null }>
-    queue(): Promise<Record<string, { waiting: number; active: number }>>
-  }
-  playground: {
-    send(agentId: ID, input: string, history: ChatMessage[]): Promise<ChatMessage>
-    checks(agentId: ID): Promise<CheckResult[]>
+  /** Platform administration: accounts and agent metadata, never agent data. */
+  admin: {
+    users(): Promise<AdminUser[]>
+    invite(email: string, platformRole: PlatformRole): Promise<{ id: ID; inviteUrl: string }>
+    setRole(id: ID, platformRole: PlatformRole): Promise<void>
+    removeUser(id: ID): Promise<void>
+    agents(): Promise<AdminAgentRow[]>
+    audit(): Promise<PlatformAuditEntry[]>
   }
 }
 
