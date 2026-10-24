@@ -177,6 +177,14 @@
   .hex-x {
     clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0 50%);
   }
+  /* Landing hero: the ingot ~120vh across, centred near 78% / 55%, cropped by the viewport. */
+  .hero-ingot {
+    --s: max(120vh, 860px);
+    width: var(--s);
+    height: var(--s);
+    left: calc(78% - var(--s) / 2);
+    top: calc(55% - var(--s) / 2);
+  }
   .shadow-float {
     box-shadow: var(--shadow-float);
   }
