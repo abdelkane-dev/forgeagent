@@ -29,6 +29,7 @@ export function PageHeader({
 export function Section({
   title,
   meta,
+  description,
   action,
   children,
   className,
@@ -36,6 +37,8 @@ export function Section({
 }: {
   title?: ReactNode
   meta?: ReactNode
+  /** One sentence under the title. */
+  description?: ReactNode
   action?: ReactNode
   children: ReactNode
   className?: string
@@ -52,6 +55,7 @@ export function Section({
           {action}
         </div>
       )}
+      {description && <p className="-mt-2 mb-4 max-w-[72ch] text-[14px] text-muted-foreground">{description}</p>}
       {children}
     </section>
   )

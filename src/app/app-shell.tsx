@@ -1,10 +1,10 @@
-import { Bell, LogOut, Menu, Moon, Search, ShieldAlert, Sun } from 'lucide-react'
+import { Bell, LogOut, Menu, Moon, Plus, Search, ShieldAlert, Sun } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Suspense, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { api, isDemo } from '@/api'
-import { useMe, useNotifications, useSettings } from '@/api/hooks'
+import { useMe, useNotifications, usePlatformSettings } from '@/api/hooks'
 import { LogoMark } from '@/components/brand/logo'
 import { LinkButton } from '@/components/common/link-button'
 import { Kbd } from '@/components/common/page'
@@ -12,7 +12,7 @@ import { LoadingBlock } from '@/components/common/states'
 import { StatusDot } from '@/components/common/status'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { ROLES } from '@/labels'
+import { L, PLATFORM_ROLES } from '@/labels'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { CommandPalette } from './command-palette'
@@ -32,7 +32,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               <li key={n.to}>
                 <NavLink
                   to={n.to}
-                  end={n.to === '/app' || n.to === '/app/agents'}
+                  end={n.to === '/app'}
                   onClick={onNavigate}
                   className={({ isActive }) =>
                     cn(
@@ -76,13 +76,16 @@ function SidebarTop() {
         <Kbd>{MOD}</Kbd>
         <Kbd>K</Kbd>
       </button>
+      <LinkButton to="/app/agents/new" className="glow-molten h-9 justify-start gap-2 bg-ember text-ember-ink hover:bg-ember/90">
+        <Plus className="size-4" /> {L.action.createAgent}
+      </LinkButton>
     </div>
   )
 }
 
 function SidebarBottom() {
   const { resolved, toggle } = useTheme()
-  const settings = useSettings()
+  const settings = usePlatformSettings()
   const me = useMe()
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -108,7 +111,7 @@ function SidebarBottom() {
           </span>
           <div className="min-w-0 text-[13px] leading-tight">
             <div className="truncate font-medium">{me.data?.name ?? '…'}</div>
-            <div className="text-muted-foreground">{me.data ? ROLES[me.data.role] : ''}</div>
+            <div className="text-muted-foreground">{me.data ? PLATFORM_ROLES[me.data.platformRole] : ''}</div>
           </div>
         </div>
         <div className="flex">
@@ -141,7 +144,7 @@ export function AppShell() {
   const location = useLocation()
   const reduce = useReducedMotion()
   const [menuOpen, setMenuOpen] = useState(false)
-  const settings = useSettings()
+  const settings = usePlatformSettings()
   const me = useMe()
   const current = NAV.flatMap((g) => g.items).find((n) => location.pathname === n.to) ?? null
 
@@ -189,7 +192,7 @@ export function AppShell() {
           <div className="flex items-center gap-3 bg-danger px-4 py-2.5 text-[14px] font-medium text-white md:px-10 dark:text-[#0b0c0e]">
             <ShieldAlert className="size-4 shrink-0" />
             <span className="flex-1">Arrêt d’urgence actif : tous les agents sont en pause.</span>
-            <Link to="/app/security#kill" className="underline underline-offset-2">
+            <Link to="/app/settings?tab=platform" className="underline underline-offset-2">
               Gérer
             </Link>
           </div>
