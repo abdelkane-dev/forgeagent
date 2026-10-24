@@ -14,7 +14,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { duration, relative } from '@/lib/format'
 import { NODE_KINDS } from '@/labels'
 import type { TabProps } from '.'
-import { can, RoleNote } from './shared'
+import { can } from './shared'
+import { RoleNote } from './role-note'
 
 type Draft = Omit<Workflow, 'id' | 'agentId' | 'version' | 'updatedAt'> & { id?: string; version?: number }
 

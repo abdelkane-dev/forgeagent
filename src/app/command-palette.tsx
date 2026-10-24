@@ -45,12 +45,12 @@ export function CommandPalette() {
           <CommandEmpty>Aucun résultat. Essayez « agent », « clé » ou « logs ».</CommandEmpty>
           <CommandGroup heading="Actions">
             <CommandItem onSelect={() => run(() => navigate('/app/agents/new'))}>
-              <Plus /> Créer un agent <CommandShortcut>C</CommandShortcut>
+              <Plus /> Forger un agent <CommandShortcut>C</CommandShortcut>
             </CommandItem>
-            <CommandItem onSelect={() => run(() => navigate('/app/playground'))}>
+            <CommandItem onSelect={() => run(() => navigate('/app/test'))}>
               <SquareTerminal /> Tester un agent
             </CommandItem>
-            <CommandItem onSelect={() => run(() => navigate('/app/security#kill'))}>
+            <CommandItem onSelect={() => run(() => navigate('/app/settings?tab=platform'))}>
               <ShieldAlert /> Arrêt d’urgence de tous les agents
             </CommandItem>
             <CommandItem onSelect={() => run(toggle)}>

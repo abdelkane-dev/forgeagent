@@ -16,19 +16,19 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { num, pct, relative, usd } from '@/lib/format'
-import { AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY, MODELS } from '@/labels'
+import { AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY, L, MODELS, STATUS, STATUS_ORDER } from '@/labels'
 import { cn } from '@/lib/utils'
 
 type Tab = 'all' | Status
 
 function RowMenu({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
   const navigate = useNavigate()
-  const toggle = useAction(() => api.agents.update(agent.id, { status: agent.status === 'active' ? 'paused' : 'active' }), {
+  const toggle = useAction(() => api.agents.setStatus(agent.id, agent.status === 'active' ? 'inactive' : 'active'), {
     invalidate: [keys.agents, keys.agent(agent.id)],
     success: agent.status === 'active' ? `${agent.name} mis en pause` : `${agent.name} activé`,
   })
-  const projects = useProjects()
-  const dup = useAction(() => api.agents.duplicate(agent.id, agent.projectIds[0] ?? projects.data?.[0]?.id ?? ''), {
+  const editor = agent.myRole !== 'viewer'
+  const dup = useAction(() => api.agents.duplicate(agent.id), {
     invalidate: [keys.agents],
     success: (a) => `Copie créée : ${a.name}`,
   })
@@ -38,19 +38,27 @@ function RowMenu({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
         <MoreHorizontal className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-48">
-        <DropdownMenuItem onClick={() => navigate(`/app/playground?agent=${agent.id}`)}>
+        <DropdownMenuItem onClick={() => navigate(`/app/agents/${agent.id}?tab=tests`)}>
           <SquareTerminal /> Tester
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => toggle.mutate(undefined)}>
-          {agent.status === 'active' ? <Pause /> : <Play />} {agent.status === 'active' ? 'Mettre en pause' : 'Activer'}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => dup.mutate(undefined)}>
-          <Copy /> Dupliquer
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={onDelete}>
-          <Trash2 /> Supprimer
-        </DropdownMenuItem>
+        {editor && (
+          <DropdownMenuItem onClick={() => toggle.mutate(undefined)} disabled={agent.status === 'starting'}>
+            {agent.status === 'active' ? <Pause /> : <Play />} {agent.status === 'active' ? L.action.pause : L.action.activate}
+          </DropdownMenuItem>
+        )}
+        {editor && (
+          <DropdownMenuItem onClick={() => dup.mutate(undefined)}>
+            <Copy /> Dupliquer
+          </DropdownMenuItem>
+        )}
+        {agent.myRole === 'owner' && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+              <Trash2 /> Supprimer et purger
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -73,7 +81,7 @@ export default function Agents() {
     onSuccess: () => setToDelete(null),
   })
   const bulk = useAction(
-    (status: 'active' | 'paused') => Promise.all(selected.map((id) => api.agents.update(id, { status }))),
+    (status: 'active' | 'inactive') => Promise.all(selected.filter((id) => agents.data?.find((a) => a.id === id)?.myRole !== 'viewer').map((id) => api.agents.setStatus(id, status))),
     {
       invalidate: [keys.agents],
       success: (_, s) => `${selected.length} agent(s) ${s === 'active' ? 'activé(s)' : 'mis en pause'}`,
@@ -100,11 +108,11 @@ export default function Agents() {
   return (
     <>
       <PageHeader
-        title="Agents"
-        description="Tous vos agents, tous types confondus. Ouvrez-en un pour le modifier, le tester ou le relier à un site."
+        title={L.nav.agents}
+        description="Les agents dont vous êtes membre. Chacun est un espace isolé : ses connaissances, ses clés, ses coûts et son audit n’appartiennent qu’à lui."
         actions={
-          <LinkButton to="/app/agents/new">
-            <Plus /> Créer un agent
+          <LinkButton to="/app/agents/new" className="glow-molten bg-ember text-ember-ink hover:bg-ember/90">
+            <Plus /> {L.action.createAgent}
           </LinkButton>
         }
       />
@@ -118,10 +126,7 @@ export default function Agents() {
         }}
         items={[
           { value: 'all', label: 'Tous', count: count('all') },
-          { value: 'active', label: 'Actifs', count: count('active') },
-          { value: 'paused', label: 'En pause', count: count('paused') },
-          { value: 'error', label: 'En erreur', count: count('error') },
-          { value: 'draft', label: 'Brouillons', count: count('draft') },
+          ...STATUS_ORDER.map((st) => ({ value: st, label: STATUS[st].label, count: count(st) })),
         ]}
       />
 
@@ -155,8 +160,8 @@ export default function Agents() {
           <Button size="sm" variant="outline" onClick={() => bulk.mutate('active')} disabled={bulk.isPending}>
             <Play /> Activer
           </Button>
-          <Button size="sm" variant="outline" onClick={() => bulk.mutate('paused')} disabled={bulk.isPending}>
-            <Pause /> Mettre en pause
+          <Button size="sm" variant="outline" onClick={() => bulk.mutate('inactive')} disabled={bulk.isPending}>
+            <Pause /> {L.action.pause}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected([])} className="ml-auto">
             Désélectionner
@@ -172,9 +177,9 @@ export default function Agents() {
               description="Créez votre premier agent ou partez d’un modèle prêt à l’emploi."
               action={
                 <div className="flex gap-2">
-                  <LinkButton to="/app/agents/new">Créer un agent</LinkButton>
-                  <LinkButton to="/app/templates" variant="outline">
-                    Voir les modèles
+                  <LinkButton to="/app/agents/new">{L.action.createAgent}</LinkButton>
+                  <LinkButton to="/app/forge" variant="outline">
+                    {L.nav.forge}
                   </LinkButton>
                 </div>
               }
@@ -286,7 +291,7 @@ export default function Agents() {
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
         title={`Supprimer « ${toDelete?.name ?? ''} » ?`}
-        description="L’agent, ses versions, sa mémoire et ses déclencheurs seront supprimés. Les intégrations qui l’appellent renverront une erreur 404. Cette action est irréversible."
+        description="Tout ce qui appartient à cet agent est purgé : configuration, connaissances et vecteurs, fichiers, mémoire, secrets, clés, workflows, coûts et audit. Exportez-le d’abord depuis son espace si besoin. Cette action est irréversible."
         confirmText={toDelete?.name}
         confirmLabel="Supprimer l’agent"
         pending={remove.isPending}

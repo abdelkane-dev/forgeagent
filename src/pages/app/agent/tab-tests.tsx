@@ -13,7 +13,8 @@ import { Input } from '@/components/ui/input'
 import { relative } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { TabProps } from '.'
-import { can, RoleNote } from './shared'
+import { can } from './shared'
+import { RoleNote } from './role-note'
 
 const KIND: Record<EvalRun['kind'], string> = { manual: 'Manuel', regression: 'Régression', team: 'La Forge' }
 

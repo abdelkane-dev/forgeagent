@@ -1,7 +1,7 @@
 import { ArrowUpRight, Check, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { useAgents, useApprovals, useOverview, useProjects, useSettings } from '@/api/hooks'
+import { useAgents, useMyApprovals, useOverview, usePlatformSettings, useProjects } from '@/api/hooks'
 import { ColumnChart, KpiStrip } from '@/components/common/charts'
 import { LinkButton } from '@/components/common/link-button'
 import { LogStream } from '@/components/common/log-stream'
@@ -11,7 +11,7 @@ import { AgentStatus, StatusDot } from '@/components/common/status'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { duration, num, pct, usd } from '@/lib/format'
-import { AGENT_TYPES } from '@/labels'
+import { AGENT_TYPES, L } from '@/labels'
 import { cn } from '@/lib/utils'
 
 const DISMISS_KEY = 'fa:onboarding-dismissed'
@@ -29,9 +29,9 @@ function GettingStarted() {
   if (hidden) return null
   const steps = [
     { title: 'Créer un projet', text: 'Rattachez vos agents à une application.', to: '/app/projects', done: !!projects.data?.length },
-    { title: 'Créer un agent', text: 'Identité, rôle, permissions, skills.', to: '/app/agents/new', done: !!agents.data?.length },
-    { title: 'Tester en bac à sable', text: 'Vérifiez connexion et configuration.', to: '/app/playground', done: false },
-    { title: 'Intégrer à votre site', text: 'Widget, API, SDK ou serveur MCP.', to: '/app/integrations', done: false },
+    { title: L.action.createAgent, text: 'Seul ou avec La Forge, qui conçoit, sécurise et teste.', to: '/app/agents/new', done: !!agents.data?.length },
+    { title: 'Tester en environnement de test', text: 'Conversation, vérifications et évaluations.', to: '/app/test', done: false },
+    { title: 'Intégrer à votre site', text: 'Widget, API, SDK ou serveur MCP.', to: '/app/integration', done: false },
   ]
   return (
     <Section
@@ -72,18 +72,16 @@ function GettingStarted() {
 }
 
 function ToHandle() {
-  const approvals = useApprovals()
+  const approvals = useMyApprovals()
   const agents = useAgents()
-  const settings = useSettings()
+  const settings = usePlatformSettings()
   const errored = agents.data?.filter((a) => a.status === 'error') ?? []
   const nearCap = agents.data?.filter((a) => a.metrics.costToday >= a.costCapPerDay * 0.8 && a.costCapPerDay > 0) ?? []
   const items = [
-    approvals.data?.length
-      ? { tone: 'warn' as const, text: `${approvals.data.length} action${approvals.data.length > 1 ? 's' : ''} en attente de validation`, to: '/app/security#approvals' }
-      : null,
-    ...errored.map((a) => ({ tone: 'danger' as const, text: `${a.name} est en erreur`, to: `/app/agents/${a.id}?tab=logs` })),
-    ...nearCap.map((a) => ({ tone: 'warn' as const, text: `${a.name} : plafond de coût à 80 %`, to: `/app/agents/${a.id}?tab=config` })),
-    settings.data?.killSwitch ? { tone: 'danger' as const, text: 'Arrêt d’urgence actif', to: '/app/security#kill' } : null,
+    ...(approvals.data ?? []).slice(0, 4).map((x) => ({ tone: 'warn' as const, text: `${agents.data?.find((a) => a.id === x.agentId)?.name ?? x.agentId} : ${x.action}`, to: `/app/agents/${x.agentId}?tab=overview` })),
+    ...errored.map((a) => ({ tone: 'danger' as const, text: `${a.name} est en erreur`, to: `/app/agents/${a.id}?tab=audit` })),
+    ...nearCap.map((a) => ({ tone: 'warn' as const, text: `${a.name} : plafond de coût à 80 %`, to: `/app/agents/${a.id}?tab=usage` })),
+    settings.data?.killSwitch ? { tone: 'danger' as const, text: 'Arrêt d’urgence actif', to: '/app/settings?tab=platform' } : null,
   ].filter(Boolean) as { tone: 'warn' | 'danger'; text: string; to: string }[]
 
   if (approvals.isPending || agents.isPending) return <RowsSkeleton rows={3} />
@@ -113,20 +111,19 @@ function ToHandle() {
 export default function Dashboard() {
   const overview = useOverview()
   const agents = useAgents()
-  const settings = useSettings()
 
   return (
     <>
       <PageHeader
-        title="Tableau de bord"
-        description="Vos agents, leur activité des dernières 24 heures et ce qui demande votre attention."
+        title={L.nav.dashboard}
+        description="Les agents dont vous êtes membre : leur activité des dernières 24 heures et ce qui demande votre attention."
         actions={
           <>
-            <LinkButton to="/app/playground" variant="outline">
+            <LinkButton to="/app/test" variant="outline">
               Tester un agent
             </LinkButton>
-            <LinkButton to="/app/agents/new">
-              <Plus /> Créer un agent
+            <LinkButton to="/app/agents/new" className="glow-molten bg-ember text-ember-ink hover:bg-ember/90">
+              <Plus /> {L.action.createAgent}
             </LinkButton>
           </>
         }
@@ -139,10 +136,10 @@ export default function Dashboard() {
           {(o) => (
             <KpiStrip
               items={[
-                { label: 'Agents actifs', value: o.activeAgents, hint: `sur ${agents.data?.length ?? '—'} agents` },
+                { label: 'Agents actifs', value: o.activeAgents, hint: `sur ${o.agents} agent${o.agents > 1 ? 's' : ''}` },
                 { label: 'Exécutions', value: num(o.runs24h), hint: `p50 ${duration(o.p50LatencyMs)}` },
-                { label: 'Coût du jour', value: usd(o.costToday), hint: settings.data ? `budget mensuel ${settings.data.monthlyBudget} $` : undefined },
-                { label: 'Taux de succès', value: pct(o.successRate), hint: '45 exécutions en erreur' },
+                { label: 'Coût du jour', value: usd(o.costToday), hint: 'production, tous vos agents' },
+                { label: 'Taux de succès', value: pct(o.successRate), hint: `${o.pendingApprovals} validation(s) en attente` },
               ]}
             />
           )}
@@ -168,7 +165,7 @@ export default function Dashboard() {
         </Section>
       </div>
 
-      <Section title="Agents" meta={agents.data ? `${agents.data.length} au total` : undefined} action={<LinkButton to="/app/agents" variant="ghost" size="sm">Voir tout</LinkButton>}>
+      <Section title="Agents" meta={agents.data ? `${agents.data.length} dont vous êtes membre` : undefined} action={<LinkButton to="/app/agents" variant="ghost" size="sm">Voir tout</LinkButton>}>
         <Async query={agents}>
           {(list) => (
             <div className="scrollbar-thin overflow-x-auto">
@@ -208,9 +205,11 @@ export default function Dashboard() {
         </Async>
       </Section>
 
-      <Section title="Journal en direct" meta="tous les agents" action={<LinkButton to="/app/observability" variant="ghost" size="sm">Observabilité</LinkButton>}>
-        <LogStream height="h-[260px]" />
-      </Section>
+      {agents.data?.[0] && (
+        <Section title="Journal en direct" meta={agents.data[0].name} action={<LinkButton to="/app/logs" variant="ghost" size="sm">{L.nav.logs}</LinkButton>}>
+          <LogStream agentId={agents.data[0].id} height="h-[260px]" />
+        </Section>
+      )}
     </>
   )
 }

@@ -1,4 +1,4 @@
-import { ArrowLeft, Plus, X } from 'lucide-react'
+import { ArrowLeft, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '@/api'
@@ -19,7 +19,6 @@ import { ENV_LABEL } from '@/labels'
 
 function Settings({ project }: { project: Project }) {
   const [p, setP] = useState(project)
-  const [domain, setDomain] = useState('')
   const save = useAction((patch: Partial<Project>) => api.projects.update(project.id, patch), { invalidate: [keys.project(project.id), keys.projects], success: 'Projet enregistré' })
   const dirty = JSON.stringify(p) !== JSON.stringify(project)
   return (
@@ -40,33 +39,9 @@ function Settings({ project }: { project: Project }) {
           ))}
         </Panel>
       </Section>
-      <Section title="Domaines autorisés" meta="origines acceptées par le widget et le SDK">
-        <Panel className="p-4">
-          <div className="flex flex-wrap gap-2">
-            {p.allowedDomains.map((d) => (
-              <button key={d} type="button" onClick={() => setP({ ...p, allowedDomains: p.allowedDomains.filter((x) => x !== d) })} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-secondary px-3 font-mono text-[13px]" aria-label={`Retirer ${d}`}>
-                {d} <X className="size-3.5" />
-              </button>
-            ))}
-            {p.allowedDomains.length === 0 && <span className="text-[14px] text-muted-foreground">Aucun domaine : le widget refusera toutes les origines.</span>}
-          </div>
-          <form
-            className="mt-3 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              const d = domain.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-              if (!d || p.allowedDomains.includes(d)) return
-              setP({ ...p, allowedDomains: [...p.allowedDomains, d] })
-              setDomain('')
-            }}
-          >
-            <Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="bonaco.pro" aria-label="Nouveau domaine" />
-            <Button type="submit" variant="outline">
-              <Plus /> Ajouter
-            </Button>
-          </form>
-        </Panel>
-      </Section>
+      <p className="mb-12 max-w-[72ch] text-[14px] text-muted-foreground">
+        Les origines autorisées du widget sont réglées dans chaque agent (Intégration › Origines autorisées) : un projet regroupe des agents, il ne leur donne aucun accès commun.
+      </p>
       <Section title="Description">
         <div className="grid gap-4">
           <Field label="Nom" htmlFor="pd-name">
@@ -81,7 +56,7 @@ function Settings({ project }: { project: Project }) {
         </div>
       </Section>
       <div className="flex gap-2">
-        <Button disabled={!dirty || save.isPending} onClick={() => save.mutate({ name: p.name, description: p.description, stack: p.stack, environments: p.environments, allowedDomains: p.allowedDomains })}>
+        <Button disabled={!dirty || save.isPending} onClick={() => save.mutate({ name: p.name, description: p.description, stack: p.stack, environments: p.environments })}>
           {save.isPending ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
         {dirty && (
@@ -132,7 +107,7 @@ export default function ProjectDetail() {
           <LinkButton to={`/app/agents/new?project=${p.id}`}>
             <Plus /> Agent dans ce projet
           </LinkButton>
-          <LinkButton to="/app/integrations?tab=app" variant="outline">
+          <LinkButton to="/app/integration" variant="outline">
             Intégrer
           </LinkButton>
         </div>

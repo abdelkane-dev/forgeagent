@@ -14,7 +14,8 @@ import { Input } from '@/components/ui/input'
 import { clock, relative } from '@/lib/format'
 import { agentSnippets, API_HOST } from '@/lib/snippets'
 import type { TabProps } from '.'
-import { can, RoleNote, useUpdate } from './shared'
+import { can, useUpdate } from './shared'
+import { RoleNote } from './role-note'
 
 const STATE: Record<AgentIntegration['status'], { tone: 'ok' | 'warn' | 'danger'; label: string }> = {
   connected: { tone: 'ok', label: 'Connecté' },

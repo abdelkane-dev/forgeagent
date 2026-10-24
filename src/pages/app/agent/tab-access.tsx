@@ -13,7 +13,8 @@ import { Input } from '@/components/ui/input'
 import { date, relative } from '@/lib/format'
 import { AGENT_ROLES } from '@/labels'
 import type { TabProps } from '.'
-import { can, RoleNote } from './shared'
+import { can } from './shared'
+import { RoleNote } from './role-note'
 
 function OneTime({ value, label, onClose }: { value: string; label: string; onClose: () => void }) {
   return (

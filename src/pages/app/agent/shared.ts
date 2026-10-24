@@ -1,8 +1,6 @@
-import type { ReactNode } from 'react'
 import { api } from '@/api'
 import { keys, useAction } from '@/api/hooks'
 import type { Agent, AgentDraft, AgentRole } from '@/api/types'
-import { AGENT_ROLES } from '@/labels'
 
 const RANK: Record<AgentRole, number> = { viewer: 0, editor: 1, owner: 2 }
 
@@ -15,16 +13,6 @@ export function useUpdate(agent: Agent) {
     invalidate: [keys.agent(agent.id), keys.agents, keys.of(agent.id, 'docs'), keys.of(agent.id, 'audit')],
     success: (a, v) => (v.note !== undefined ? `v${a.version} publiée` : 'Modification enregistrée'),
   })
-}
-
-/** Shown instead of a form when the role on this agent does not allow it. */
-export function RoleNote({ agent, min, children }: { agent: Agent; min: AgentRole; children?: ReactNode }) {
-  if (can(agent, min)) return null
-  return (
-    <p className="mb-4 rounded-md bg-secondary/60 px-3 py-2 text-[13.5px] text-muted-foreground">
-      {children ?? `Réservé au rôle ${AGENT_ROLES[min].label.toLowerCase()} ou plus.`} Votre rôle sur cet agent : {AGENT_ROLES[agent.myRole].label}.
-    </p>
-  )
 }
 
 /** One base64 string from a File (knowledge uploads). */

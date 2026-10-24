@@ -41,12 +41,12 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
         <H2>Premier agent en cinq minutes</H2>
         <ol className="mb-4 grid max-w-[68ch] list-decimal gap-2 pl-5 text-[16px] leading-[1.6]">
           <li>Créez un projet (par exemple Bonaco Pro) dans Projets.</li>
-          <li>Ouvrez Créer un agent et suivez les sept étapes.</li>
+          <li>Ouvrez Forger un agent : confiez la demande à La Forge ou suivez les sept étapes manuelles.</li>
           <li>Testez-le dans l’environnement de test : scénarios, appels d’outils, vérifications.</li>
           <li>Copiez le code d’intégration, ou reliez un site déjà en ligne.</li>
         </ol>
         <LinkButton to="/app/agents/new" className="mt-2">
-          Créer un agent
+          Forger un agent
         </LinkButton>
       </>
     ),
@@ -160,7 +160,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
       <ul className="grid max-w-md gap-2 text-[15px]">
         {[
           [['Ctrl', 'K'], 'Palette de commandes'],
-          [['C'], 'Créer un agent'],
+          [['C'], 'Forger un agent'],
           [['T'], 'Basculer le thème'],
           [['G', 'D'], 'Tableau de bord'],
           [['G', 'A'], 'Agents'],

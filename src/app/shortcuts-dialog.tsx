@@ -9,7 +9,7 @@ export function ShortcutsDialog() {
   const rows: [string[], string][] = [
     [[MOD, 'K'], 'Palette de commandes'],
     [['/'], 'Rechercher'],
-    [['C'], 'Créer un agent'],
+    [['C'], 'Forger un agent'],
     [['T'], 'Basculer le thème'],
     [['?'], 'Afficher les raccourcis'],
     ...NAV_FLAT.filter((n) => n.key).map((n) => [['G', n.key!.toUpperCase()], n.label] as [string[], string]),

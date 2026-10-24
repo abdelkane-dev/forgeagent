@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { lazy, Suspense, useEffect } from 'react'
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppShell } from '@/app/app-shell'
 import { UiStateProvider } from '@/app/ui-state'
 import { LoadingBlock } from '@/components/common/states'
@@ -15,24 +15,16 @@ const NotFound = lazy(() => import('@/pages/not-found'))
 const Dashboard = lazy(() => import('@/pages/app/dashboard'))
 const Agents = lazy(() => import('@/pages/app/agents'))
 const AgentNew = lazy(() => import('@/pages/app/agent-new'))
-const AgentDetail = lazy(() => import('@/pages/app/agent-detail'))
-const Workflows = lazy(() => import('@/pages/app/workflows'))
+const AgentWorkspace = lazy(() => import('@/pages/app/agent'))
 const Skills = lazy(() => import('@/pages/app/skills'))
-const Knowledge = lazy(() => import('@/pages/app/knowledge'))
-const Templates = lazy(() => import('@/pages/app/templates'))
+const TestPage = lazy(() => import('@/pages/app/test'))
+const IntegrationPage = lazy(() => import('@/pages/app/integration'))
+const LogsPage = lazy(() => import('@/pages/app/logs'))
 const Projects = lazy(() => import('@/pages/app/projects'))
 const ProjectDetail = lazy(() => import('@/pages/app/project-detail'))
-const Integrations = lazy(() => import('@/pages/app/integrations'))
-const Playground = lazy(() => import('@/pages/app/playground'))
-const Evals = lazy(() => import('@/pages/app/evals'))
-const Observability = lazy(() => import('@/pages/app/observability'))
-const Security = lazy(() => import('@/pages/app/security'))
-const Audit = lazy(() => import('@/pages/app/audit'))
-const Usage = lazy(() => import('@/pages/app/usage'))
-const Team = lazy(() => import('@/pages/app/team'))
+const Forge = lazy(() => import('@/pages/app/forge'))
 const SettingsPage = lazy(() => import('@/pages/app/settings'))
 const Notifications = lazy(() => import('@/pages/app/notifications'))
-const InternalTeam = lazy(() => import('@/pages/app/internal-team'))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: false } },
@@ -69,24 +61,21 @@ export default function App() {
                     <Route index element={<Dashboard />} />
                     <Route path="agents" element={<Agents />} />
                     <Route path="agents/new" element={<AgentNew />} />
-                    <Route path="agents/:id" element={<AgentDetail />} />
-                    <Route path="workflows" element={<Workflows />} />
+                    <Route path="agents/:id" element={<AgentWorkspace />} />
                     <Route path="skills" element={<Skills />} />
-                    <Route path="knowledge" element={<Knowledge />} />
-                    <Route path="templates" element={<Templates />} />
+                    <Route path="test" element={<TestPage />} />
+                    <Route path="integration" element={<IntegrationPage />} />
+                    <Route path="logs" element={<LogsPage />} />
                     <Route path="projects" element={<Projects />} />
                     <Route path="projects/:id" element={<ProjectDetail />} />
-                    <Route path="integrations" element={<Integrations />} />
-                    <Route path="playground" element={<Playground />} />
-                    <Route path="evals" element={<Evals />} />
-                    <Route path="observability" element={<Observability />} />
-                    <Route path="security" element={<Security />} />
-                    <Route path="audit" element={<Audit />} />
-                    <Route path="usage" element={<Usage />} />
-                    <Route path="team" element={<Team />} />
+                    <Route path="forge" element={<Forge />} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="notifications" element={<Notifications />} />
-                    <Route path="internal-team" element={<InternalTeam />} />
+                    {/* v1 addresses */}
+                    <Route path="playground" element={<Navigate to="/app/test" replace />} />
+                    <Route path="integrations" element={<Navigate to="/app/integration" replace />} />
+                    <Route path="observability" element={<Navigate to="/app/logs" replace />} />
+                    <Route path="internal-team" element={<Navigate to="/app/forge" replace />} />
                     <Route path="*" element={<NotFound inApp />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />

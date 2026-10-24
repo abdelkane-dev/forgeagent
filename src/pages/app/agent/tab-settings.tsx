@@ -14,7 +14,8 @@ import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 import { ACTIONS, AUTONOMY, MODELS, TRIGGERS } from '@/labels'
 import type { TabProps } from '.'
-import { can, RoleNote, useUpdate } from './shared'
+import { can, useUpdate } from './shared'
+import { RoleNote } from './role-note'
 
 function Config({ agent }: { agent: Agent }) {
   const [f, setF] = useState(agent)

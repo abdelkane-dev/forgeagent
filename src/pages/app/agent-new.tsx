@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { api } from '@/api'
 import { keys, useAction, useConnectors, useProjects, useSkills, useTemplates } from '@/api/hooks'
-import type { AgentDraft, AgentType, Autonomy, ClaudeModel, IntegrationChannel, Role, TriggerKind } from '@/api/types'
+import type { AgentDraft, AgentRole, AgentType, Autonomy, ClaudeModel, IntegrationChannel, TriggerKind } from '@/api/types'
 import { ChipGroup, Field, NativeSelect, SwitchRow } from '@/components/common/field'
 import { HexLoader } from '@/components/common/hex-loader'
 import { PageHeader, Panel } from '@/components/common/page'
@@ -12,7 +12,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
-import { ACTIONS, AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY, CAPABILITIES, INTEGRATIONS, MODELS, ROLES, TRIGGERS } from '@/labels'
+import { ACTIONS, AGENT_ROLES, AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY, CAPABILITIES, INTEGRATIONS, L, MODELS, TRIGGERS } from '@/labels'
+import { ForgeRequestForm } from '@/components/agent/forge-request-form'
+import { UnderlineTabs } from '@/components/common/underline-tabs'
 import { cn } from '@/lib/utils'
 
 const STEPS = ['Identité', 'Type et modèle', 'Déclencheurs et outils', 'Actions et permissions', 'Skills', 'Intégration', 'Vérification'] as const
@@ -41,10 +43,13 @@ const empty = (projectId = ''): Draft => ({
   capabilities: [],
   skillIds: [],
   integrations: ['rest'],
-  permissions: { allowedActions: [], roles: ['admin', 'editor'], people: [] },
+  permissions: { allowedActions: [] },
+  members: [],
   guardrails: { promptInjection: true, piiMasking: true, humanApproval: true, forbiddenActions: ['Supprimer des données'], rateLimitPerMin: 60 },
   costCapPerDay: 20,
-  memory: { longTerm: false, sharedWithProject: false, retentionDays: 90 },
+  monthlyBudget: 300,
+  allowedOrigins: [],
+  memory: { longTerm: false, shortTermTurns: 10, retentionDays: 90 },
   siteUrl: '',
 })
 
@@ -66,7 +71,7 @@ function StepTitle({ title, children }: { title: string; children?: ReactNode })
   )
 }
 
-export default function AgentNew() {
+function ManualWizard() {
   const navigate = useNavigate()
   const reduce = useReducedMotion()
   const [params] = useSearchParams()
@@ -79,6 +84,7 @@ export default function AgentNew() {
   const [d, setD] = useState<Draft>(() => loadDraft() ?? empty())
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [personInput, setPersonInput] = useState('')
+  const [personRole, setPersonRole] = useState<AgentRole>('viewer')
   const [forbidInput, setForbidInput] = useState('')
   const [building, setBuilding] = useState<number | null>(null)
   const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }))
@@ -132,10 +138,11 @@ export default function AgentNew() {
       const { triggerKinds, siteUrl, ...rest } = d
       const draft: AgentDraft = {
         ...rest,
-        triggers: triggerKinds.map((k, i) => ({ id: `trg_new_${i}`, kind: k, label: TRIGGERS[k], config: k === 'cron' ? '0 * * * *' : k === 'webhook' ? '/hooks/new' : '', enabled: true })),
+        triggers: triggerKinds.map((k, i) => ({ id: `trg_new_${i}`, kind: k, label: TRIGGERS[k], config: k === 'cron' ? '0 * * * *' : k === 'webhook' ? 'nouvel-evenement' : '', enabled: true })),
       }
       const agent = await api.agents.create(draft)
-      if (siteUrl) await api.agents.pingSite(agent.id, siteUrl).catch(() => null)
+      // The site becomes an integration of this agent: its origin is allowed for the widget.
+      if (siteUrl) await api.integrations.create(agent.id, { kind: 'website', name: new URL(siteUrl).host, url: siteUrl, environment: 'test' }).catch(() => null)
       return agent
     },
     {
@@ -146,7 +153,7 @@ export default function AgentNew() {
         } catch {
           /* ignore */
         }
-        setTimeout(() => navigate(`/app/agents/${agent.id}?created=1`), reduce ? 200 : 900)
+        setTimeout(() => navigate(`/app/agents/${agent.id}?tab=tests`), reduce ? 200 : 900)
       },
     },
   )
@@ -343,7 +350,7 @@ export default function AgentNew() {
       </Field>
       <div className="grid gap-x-8 md:grid-cols-2">
         <SwitchRow title="Mémoire à long terme" description="Retient préférences et faits entre les exécutions." checked={d.memory.longTerm} onChange={(v) => set({ memory: { ...d.memory, longTerm: v } })} />
-        <SwitchRow title="Partager la mémoire avec le projet" description="Les autres agents du projet y ont accès." checked={d.memory.sharedWithProject} onChange={(v) => set({ memory: { ...d.memory, sharedWithProject: v } })} />
+        <SwitchRow title="Mémoire courte" description="Garde les 10 derniers échanges de chaque session, jamais partagés avec un autre agent." checked={d.memory.shortTermTurns > 0} onChange={(v) => set({ memory: { ...d.memory, shortTermTurns: v ? 10 : 0 } })} />
       </div>
     </div>,
 
@@ -410,30 +417,31 @@ export default function AgentNew() {
           <SwitchRow title="Validation humaine des actions sensibles" checked={d.guardrails.humanApproval} onChange={(v) => set({ guardrails: { ...d.guardrails, humanApproval: v } })} />
         </div>
       </div>
-      <Field label="Rôles qui peuvent utiliser et modifier l’agent">
-        <ChipGroup label="Rôles" value={d.permissions.roles} onChange={(v) => set({ permissions: { ...d.permissions, roles: v as Role[] } })} options={(Object.keys(ROLES) as Role[]).map((r) => ({ value: r, label: ROLES[r] }))} />
-      </Field>
-      <Field label="Personnes autorisées" hint="Accès nominatif en plus des rôles.">
-        {d.permissions.people.length > 0 && (
+      <Field label="Membres de l’agent" hint="Vous en serez propriétaire. Ajoutez des comptes existants : ils ne verront que cet agent.">
+        {(d.members ?? []).length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {d.permissions.people.map((p) => (
-              <button key={p} type="button" onClick={() => set({ permissions: { ...d.permissions, people: d.permissions.people.filter((x) => x !== p) } })} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-secondary px-3 text-[13.5px]" aria-label={`Retirer ${p}`}>
-                {p} <X className="size-3.5" />
+            {(d.members ?? []).map((m) => (
+              <button key={m.email} type="button" onClick={() => set({ members: (d.members ?? []).filter((x) => x.email !== m.email) })} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-secondary px-3 text-[13.5px]" aria-label={`Retirer ${m.email}`}>
+                {m.email} · {AGENT_ROLES[m.role].label} <X className="size-3.5" />
               </button>
             ))}
           </div>
         )}
         <form
-          className="flex gap-2"
+          className="flex flex-wrap gap-2"
           onSubmit={(e) => {
             e.preventDefault()
             if (!/^\S+@\S+\.\S+$/.test(personInput)) return setErrors({ people: 'Adresse email invalide.' })
             setErrors({})
-            set({ permissions: { ...d.permissions, people: [...d.permissions.people, personInput] } })
+            set({ members: [...(d.members ?? []).filter((x) => x.email !== personInput), { email: personInput, role: personRole }] })
             setPersonInput('')
           }}
         >
-          <Input type="email" value={personInput} onChange={(e) => setPersonInput(e.target.value)} placeholder="ines@bonaco.pro" aria-label="Email d’une personne autorisée" aria-invalid={!!errors.people} />
+          <Input type="email" value={personInput} onChange={(e) => setPersonInput(e.target.value)} placeholder="ines@bonaco.pro" aria-label="Email d’un membre" aria-invalid={!!errors.people} className="min-w-56 flex-1" />
+          <NativeSelect aria-label="Rôle du membre" className="w-36" value={personRole} onChange={(e) => setPersonRole(e.target.value as AgentRole)}>
+            <option value="viewer">{AGENT_ROLES.viewer.label}</option>
+            <option value="editor">{AGENT_ROLES.editor.label}</option>
+          </NativeSelect>
           <Button type="submit" variant="outline">
             <Plus /> Ajouter
           </Button>
@@ -509,10 +517,8 @@ export default function AgentNew() {
 
   return (
     <>
-      <PageHeader
-        title="Créer un agent"
-        description="Sept étapes, brouillon enregistré automatiquement."
-        actions={
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <p className="text-[14px] text-muted-foreground">Sept étapes, brouillon enregistré automatiquement. L’agent démarre en état « Démarrage » : testez-le puis activez-le.</p>
           <Button
             variant="ghost"
             onClick={() => {
@@ -523,8 +529,7 @@ export default function AgentNew() {
           >
             Recommencer
           </Button>
-        }
-      />
+      </div>
       <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
         <nav aria-label="Étapes">
           <div className="mb-3 h-1 overflow-hidden rounded-full bg-secondary lg:hidden">
@@ -579,12 +584,33 @@ export default function AgentNew() {
               </Button>
             ) : (
               <Button onClick={startBuild} disabled={create.isPending}>
-                <Check /> Créer l’agent
+                <Check /> {L.action.createAgent}
               </Button>
             )}
           </div>
         </div>
       </div>
+    </>
+  )
+}
+
+export default function AgentNew() {
+  const [params, setParams] = useSearchParams()
+  const mode = params.get('mode') === 'manual' ? 'manual' : 'forge'
+  return (
+    <>
+      <PageHeader title={L.action.createAgent} description="Avec La Forge, l’équipe interne conçoit, contrôle, construit et teste l’agent pour vous. Ou configurez-le vous-même, étape par étape." />
+      <UnderlineTabs
+        label="Façon de créer l’agent"
+        value={mode}
+        onChange={(v) => setParams(v === 'forge' ? {} : { mode: v })}
+        items={[
+          { value: 'forge', label: 'Avec La Forge' },
+          { value: 'manual', label: 'Configuration manuelle' },
+        ]}
+        className="mb-8"
+      />
+      {mode === 'forge' ? <ForgeRequestForm /> : <ManualWizard />}
     </>
   )
 }

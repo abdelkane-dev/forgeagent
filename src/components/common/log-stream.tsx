@@ -16,8 +16,8 @@ const LEVEL_TONE: Record<LogLevel, string> = {
   error: 'text-[#ff7b7b]',
 }
 
-/** Live tail of agent logs, styled as a terminal. */
-export function LogStream({ agentId, height = 'h-[360px]', className }: { agentId?: ID; height?: string; className?: string }) {
+/** Live tail of ONE agent's logs, styled as a terminal. */
+export function LogStream({ agentId, height = 'h-[360px]', className }: { agentId: ID; height?: string; className?: string }) {
   const initial = useLogs(agentId)
   const agents = useAgents()
   const [live, setLive] = useState<LogEntry[]>([])
@@ -31,13 +31,10 @@ export function LogStream({ agentId, height = 'h-[360px]', className }: { agentI
   }, [paused])
 
   useEffect(() => {
-    const off = api.logs.subscribe(
-      (e) => {
-        if (!pausedRef.current) setLive((l) => [...l.slice(-300), e])
-      },
-      { agentId },
-    )
-    return off
+    // One agent's own channel: the stream never mixes agents (callers key it by agent).
+    return api.logs.subscribe(agentId, (e) => {
+      if (!pausedRef.current) setLive((l) => [...l.slice(-300), e])
+    })
   }, [agentId])
 
   const rows = [...(cleared ? [] : (initial.data ?? [])), ...live].filter((l) => level === 'all' || l.level === level)

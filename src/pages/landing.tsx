@@ -3,6 +3,7 @@ import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { LogoMark } from '@/components/brand/logo'
+import { HeatShimmer, Sparks } from '@/components/brand/sparks'
 import { CodeBlock } from '@/components/common/code-block'
 import { Item, Shutter, Stagger } from '@/components/landing/reveal'
 import { RunDemo } from '@/components/landing/run-demo'
@@ -76,6 +77,11 @@ function Hero() {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
       />
+      {/* Heat over the ingot and sparks rising from it (decorative, off under reduced motion) */}
+      <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 hidden w-[55%] lg:block">
+        <HeatShimmer />
+        <Sparks count={22} />
+      </div>
 
       <div className="relative mx-auto grid h-full max-w-[1440px] gap-10 px-4 pt-28 sm:px-8 lg:grid-cols-12 lg:items-center lg:pt-0">
         <Stagger className="min-w-0 lg:col-span-6">
@@ -88,7 +94,7 @@ function Hero() {
           </Item>
           <Item>
             <p className="mt-8 max-w-[34ch] text-[19px] leading-[1.45] lg:mt-10 lg:text-[21px]">
-              La console open source pour créer, tester, intégrer et superviser des agents propulsés par Claude, sur votre propre infrastructure.
+              La console open source pour forger, tester, intégrer et superviser des agents propulsés par Claude. Chaque agent est un espace scellé : ses données, ses clés et ses coûts n’appartiennent qu’à lui.
             </p>
           </Item>
           <Item className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
@@ -324,7 +330,7 @@ function Showcase() {
             <p className="mt-6 max-w-[38ch] text-[18px] leading-[1.5]">{s.text}</p>
           </Item>
           <Item className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Link to={tab === 'create' ? '/app/agents/new' : tab === 'test' ? '/app/playground' : '/app/integrations'} className="flex h-[72px] items-center rounded-lg bg-foreground px-6 text-[17px] font-bold text-background transition-colors hover:bg-ember hover:text-ember-ink">
+            <Link to={tab === 'create' ? '/app/agents/new' : tab === 'test' ? '/app/test' : '/app/integration'} className="flex h-[72px] items-center rounded-lg bg-foreground px-6 text-[17px] font-bold text-background transition-colors hover:bg-ember hover:text-ember-ink">
               Essayer dans la console
             </Link>
             <Link to="/docs" className="flex h-[72px] items-center rounded-lg bg-secondary px-6 text-[17px] font-bold transition-colors hover:bg-input">
@@ -520,10 +526,10 @@ function Footer() {
   const letters = 'ForgeAgent'.split('')
   const heights = [100, 72, 84, 64, 90, 100, 70, 88, 62, 80]
   const cols: [string, [string, string][]][] = [
-    ['Produit', [['Console', '/app'], ['Créer un agent', '/app/agents/new'], ['Environnement de test', '/app/playground'], ['Modèles', '/app/templates']]],
+    ['Produit', [['Console', '/app'], ['Forger un agent', '/app/agents/new'], ['Test', '/app/test'], ['La Forge', '/app/forge']]],
     ['Développeurs', [['Documentation', '/docs'], ['Brancher le back-end', '/docs/backend'], ['API REST', '/docs/api'], ['SDK et MCP', '/docs/integration']]],
     ['Projet', [['GitHub', GITHUB], ['Licence Apache 2.0', `${GITHUB}/blob/main/LICENSE`], ['Feuille de route', `${GITHUB}/discussions`], ['Contribuer', `${GITHUB}/blob/main/CONTRIBUTING.md`]]],
-    ['Compte', [['Connexion', '/login'], ['Inscription', '/login?mode=signup'], ['Paramètres', '/app/settings'], ['Sécurité', '/app/security']]],
+    ['Compte', [['Connexion', '/login'], ['Inscription', '/login?mode=signup'], ['Paramètres', '/app/settings'], ['Plateforme', '/app/settings?tab=platform']]],
   ]
   return (
     <footer className="bg-card">

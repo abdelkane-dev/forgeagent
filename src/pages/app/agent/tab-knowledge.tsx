@@ -13,7 +13,8 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { date, relative } from '@/lib/format'
 import type { TabProps } from '.'
-import { can, fileToBase64, RoleNote, useUpdate } from './shared'
+import { can, fileToBase64, useUpdate } from './shared'
+import { RoleNote } from './role-note'
 
 const KIND: Record<KnowledgeDoc['kind'], string> = { pdf: 'PDF', docx: 'Word', website: 'Site web', markdown: 'Markdown', text: 'Texte' }
 

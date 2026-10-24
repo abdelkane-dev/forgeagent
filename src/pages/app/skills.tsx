@@ -93,7 +93,7 @@ export default function Skills() {
                     </div>
                     <p className="mt-1.5 text-[14px] text-muted-foreground">{s.description}</p>
                     <p className="mt-3 text-[13px] text-muted-foreground">
-                      v{s.version} · {s.author} · utilisée par {s.installs} agent{s.installs > 1 ? 's' : ''}
+                      v{s.version} · {s.author}
                     </p>
                   </div>
                   <div className="flex gap-2">
