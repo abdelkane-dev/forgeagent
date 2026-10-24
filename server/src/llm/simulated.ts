@@ -44,7 +44,10 @@ const agentSimulation: Simulation = (req) => {
   if (actionTool && !actedAlready && match) {
     return { toolCalls: [{ id: randomUUID(), name: 'perform_action', input: { action: match[1], reason: `Demande : ${input.slice(0, 80)}` } }], stopReason: 'tool_use' }
   }
-  const results = blocks.filter((b) => b.type === 'tool_result').map((b) => (b as { content: string }).content)
+  // Tool results arrive wrapped as untrusted data: quote their content, never the wrapper.
+  const results = blocks
+    .filter((b) => b.type === 'tool_result')
+    .map((b) => (b as { content: string }).content.replace(/<\/?donnees_non_fiables[^>]*>/g, '').trim())
   return {
     text: results.length
       ? `Analyse terminée. ${results.map((r) => r.slice(0, 160)).join(' · ')}`

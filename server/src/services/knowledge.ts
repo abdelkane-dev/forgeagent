@@ -57,9 +57,16 @@ export async function addDoc(
     .values({ id, agentId, name: input.name, kind: input.kind, size, status: 'indexing', storageKey })
     .returning()
   await audit(tx, agentId, { actor, actorType: 'user', action: 'a ajouté une source', target: input.name })
-  // Text pasted inline travels with the job, never through another agent's space.
-  await queue.add('knowledge.index', 'index', { agentId, docId: id, content: input.content ?? null }, { jobId: `agent:${agentId}:kb:${id}` })
   return toDoc(d)
+}
+
+/**
+ * Queues the indexing of a document. Call it AFTER the transaction that created the document has
+ * committed: a worker picking the job earlier would not see the row yet.
+ * Text pasted inline travels with the job, never through another agent's space.
+ */
+export function enqueueIndex(agentId: string, docId: string, content: string | null) {
+  return queue.add('knowledge.index', 'index', { agentId, docId, content }, { jobId: `agent:${agentId}:kb:${docId}` })
 }
 
 const stripHtml = (html: string) =>
@@ -73,7 +80,8 @@ const stripHtml = (html: string) =>
 /** Background job: extract → chunk → embed → store vectors, all in the agent's own context. */
 export async function indexDoc(agentId: string, docId: string, inline: string | null) {
   const doc = await asAgent(agentId, async (tx) => (await tx.select().from(s.knowledgeDocs).where(eq(s.knowledgeDocs.id, docId)))[0])
-  if (!doc) return
+  // Not visible (yet): fail the job so the queue retries it instead of completing silently.
+  if (!doc) throw new Error(`knowledge doc ${docId} not found`)
   try {
     let text = inline ?? ''
     if (doc.kind === 'website') {

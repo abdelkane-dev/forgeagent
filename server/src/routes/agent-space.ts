@@ -13,7 +13,7 @@ import type { AppEnv } from '../http/types'
 import { checkIntegration, createIntegration, deleteIntegration, listIntegrations, sendToSite } from '../runtime/site'
 import { addMember, createKey, createWebhook, deleteSecret, deleteWebhook, listKeys, listMembers, listSecrets, listWebhooks, putSecret, removeMember, revokeKey, rotateKey, setMemberRole } from '../services/access'
 import { addCase, createSuite, deleteSuite, listCases, listRuns, listSuites, runSuite } from '../services/evals'
-import { addDoc, addMemory, forget, listDocs, listMemories, removeDoc, search } from '../services/knowledge'
+import { addDoc, addMemory, enqueueIndex, forget, listDocs, listMemories, removeDoc, search } from '../services/knowledge'
 import { logChannel, writeLog } from '../services/settings'
 import { deliver, emitWebhook } from '../services/webhooks'
 import { deleteWorkflow, listWorkflowRuns, listWorkflows, resumeWorkflow, saveWorkflow, startWorkflow } from '../services/workflows'
@@ -106,9 +106,11 @@ export function agentSpaceRoutes(app: Hono<AppEnv>) {
 
   /* ---------- Connaissances et mémoire ---------- */
   route(app, { method: 'get', path: `${P}/knowledge`, tag: 'Connaissances et mémoire', summary: 'Sources indexées de l’agent', agent: 'viewer' }, ({ agent }) => agent.tx((tx) => listDocs(tx, agent.id)))
-  route(app, { method: 'post', path: `${P}/knowledge`, tag: 'Connaissances et mémoire', summary: 'Ajouter une source (texte, fichier ou site) : indexation en arrière-plan', agent: 'editor', body: KnowledgeInput, status: 201 }, ({ agent, body }) =>
-    agent.tx((tx) => addDoc(tx, agent.id, { name: body.name, kind: body.kind, content: body.content, fileBase64: body.file }, agent.actor.name)),
-  )
+  route(app, { method: 'post', path: `${P}/knowledge`, tag: 'Connaissances et mémoire', summary: 'Ajouter une source (texte, fichier ou site) : indexation en arrière-plan', agent: 'editor', body: KnowledgeInput, status: 201 }, async ({ agent, body }) => {
+    const doc = await agent.tx((tx) => addDoc(tx, agent.id, { name: body.name, kind: body.kind, content: body.content, fileBase64: body.file }, agent.actor.name))
+    await enqueueIndex(agent.id, doc.id, body.content ?? null)
+    return doc
+  })
   route(app, { method: 'delete', path: `${P}/knowledge/:docId`, tag: 'Connaissances et mémoire', summary: 'Retirer une source (et ses vecteurs)', agent: 'editor', status: 204 }, async ({ agent, params }) => {
     await agent.tx((tx) => removeDoc(tx, agent.id, params.docId, agent.actor.name))
   })
