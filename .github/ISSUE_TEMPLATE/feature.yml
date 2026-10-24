@@ -1,0 +1,17 @@
+name: Idée
+description: Proposer une amélioration
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: Le problème, description: "Ce qui manque ou gêne aujourd’hui." }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: La proposition }
+  - type: checkboxes
+    id: isolation
+    attributes:
+      label: Isolation
+      options:
+        - label: La proposition respecte l’isolation par agent (aucune donnée partagée entre agents).

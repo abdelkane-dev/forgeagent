@@ -1,0 +1,21 @@
+name: Bug
+description: Quelque chose ne fonctionne pas comme prévu
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: Ce qui se passe, description: "Le comportement observé, avec le message d’erreur." }
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes: { label: Étapes pour reproduire, placeholder: "1. …\n2. …" }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: Ce qui était attendu }
+  - type: dropdown
+    id: mode
+    attributes: { label: Mode, options: [Docker compose, npm run server (PGlite), Mode démo] }
+  - type: input
+    id: version
+    attributes: { label: Commit ou version }
