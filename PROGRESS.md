@@ -77,7 +77,7 @@ Légende : [x] fini · [~] en cours · [ ] à faire
 - [x] Build, lint et parcours Playwright v2 verts (voir BACKEND_PROGRESS.md)
 
 ## Pistes après livraison
-- Remplacer les liens GitHub `forgeagent/forgeagent` par l’URL réelle du dépôt.
+- [x] Liens GitHub pointés vers `abdelkane-dev/forgeagent`.
 - Ajouter des tests unitaires (Vitest) sur `src/api/mock` et les hooks une fois le back-end défini.
 
 ## Consommation (approx. : `/cost` non disponible dans cette session, estimation du contexte)

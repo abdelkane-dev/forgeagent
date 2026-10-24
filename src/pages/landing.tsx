@@ -443,7 +443,7 @@ function TypesBand() {
           <Item className="mt-10">
             <CodeBlock
               title="Terminal"
-              snippets={`git clone https://github.com/forgeagent/forgeagent
+              snippets={`git clone https://github.com/abdelkane-dev/forgeagent
 cd forgeagent && docker compose up
 # Console prête sur http://localhost:3000`}
             />
