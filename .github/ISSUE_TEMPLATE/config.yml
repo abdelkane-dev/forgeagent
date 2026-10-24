@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Question ou idée à discuter
+    url: https://github.com/abdelkane-dev/forgeagent/discussions
+    about: Posez vos questions dans les Discussions.
   - name: Signaler une faille de sécurité
     url: https://github.com/abdelkane-dev/forgeagent/security/advisories/new
     about: En privé, jamais dans une issue publique.

@@ -1,0 +1,7 @@
+# Every change is reviewed by the maintainer. Isolation code gets the same owner, listed explicitly
+# so a future co-maintainer can be added here without opening the whole repository.
+*                         @abdelkane-dev
+/server/drizzle/          @abdelkane-dev
+/server/src/db/           @abdelkane-dev
+/server/src/http/         @abdelkane-dev
+/server/test/isolation.test.ts @abdelkane-dev
