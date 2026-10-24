@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
 import type { Agent, AgentDraft, AgentMetrics, AgentRole, AgentStatus } from '@shared/types'
-import { schema as s, type Tx } from '../db/client'
+import { schema as s, type Tx, serial } from '../db/client'
 import { isKnownAction, isSensitive } from '../domain/actions'
 import { audit, type ActorType } from '../lib/audit'
 import { newId } from '../lib/crypto'
@@ -53,16 +53,15 @@ async function metricsFor(tx: Tx, ids: string[]) {
 export async function hydrate(tx: Tx, rows: AgentRow[], userId?: string): Promise<Agent[]> {
   if (!rows.length) return []
   const ids = rows.map((r) => r.id)
-  const [projectLinks, skillLinks, versions, metrics, mine] = await Promise.all([
-    tx.select().from(s.agentProjects).where(inArray(s.agentProjects.agentId, ids)),
-    tx.select().from(s.agentSkills).where(inArray(s.agentSkills.agentId, ids)),
-    tx
+  const [projectLinks, skillLinks, versions, metrics, mine] = await serial([
+    () => tx.select().from(s.agentProjects).where(inArray(s.agentProjects.agentId, ids)),
+    () => tx.select().from(s.agentSkills).where(inArray(s.agentSkills.agentId, ids)),
+    () => tx
       .select({ agentId: s.agentVersions.agentId, version: s.agentVersions.version, note: s.agentVersions.note, author: s.agentVersions.author, createdAt: s.agentVersions.createdAt, regressionScore: s.agentVersions.regressionScore })
       .from(s.agentVersions)
       .where(inArray(s.agentVersions.agentId, ids)),
-    metricsFor(tx, ids),
-    userId ? tx.select().from(s.agentMembers).where(and(inArray(s.agentMembers.agentId, ids), eq(s.agentMembers.userId, userId))) : Promise.resolve([]),
-  ])
+    () => metricsFor(tx, ids),
+    () => userId ? tx.select().from(s.agentMembers).where(and(inArray(s.agentMembers.agentId, ids), eq(s.agentMembers.userId, userId))) : Promise.resolve([])])
   return rows.map((r) => {
     const { createdBy: _c, allowedActions, ...rest } = r
     return {

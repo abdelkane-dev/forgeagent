@@ -1,18 +1,32 @@
-# ForgeAgent back-end: PostgreSQL + Redis + API + worker.
+# ForgeAgent back-end: PostgreSQL (pgvector) + Redis + S3 (SeaweedFS) + API + worker.
 # 1) node scripts/init-env.mjs   (creates .env with random secrets)
 # 2) docker compose up --build
 # 3) npm run dev                 (console on http://localhost:5173)
+#
+# Isolation: migrations run as the database owner (DATABASE_ADMIN_URL); the API and the worker
+# connect as forge_app, a role without superuser rights, so Row-Level Security always applies.
 name: forgeagent
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://forge_app:${APP_DB_PASSWORD:?définissez APP_DB_PASSWORD dans .env}@postgres:5432/${POSTGRES_DB:-forgeagent}
+  DATABASE_ADMIN_URL: postgres://${POSTGRES_USER:-forge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-forgeagent}
+  REDIS_URL: redis://redis:6379
+  QUEUE_DRIVER: bullmq
+  STORAGE_DRIVER: s3
+  S3_ENDPOINT: http://s3:8333
+  S3_BUCKET: ${S3_BUCKET:-forgeagent}
+  S3_ACCESS_KEY: ${S3_ROOT_USER:-forge}
+  S3_SECRET_KEY: ${S3_ROOT_PASSWORD}
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-forge}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définissez POSTGRES_PASSWORD dans .env}
       POSTGRES_DB: ${POSTGRES_DB:-forgeagent}
     ports: ["${POSTGRES_PORT:-55432}:5432"]
-    volumes: [pgdata:/var/lib/postgresql/data]
+    volumes: [pgdata_v2:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -27,30 +41,48 @@ services:
       interval: 5s
       retries: 10
 
+  # Object storage, S3-compatible (SeaweedFS): one prefix per agent (agents/<agentId>/…), private bucket.
+  # Any S3 works instead: set STORAGE_DRIVER=s3 and S3_* to point to it.
+  s3:
+    image: chrislusf/seaweedfs:3.97
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        printf '{"identities":[{"name":"forge","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" > /tmp/s3.json
+        exec weed server -dir=/data -ip.bind=0.0.0.0 -s3 -s3.port=8333 -s3.config=/tmp/s3.json
+    environment:
+      S3_ACCESS_KEY: ${S3_ROOT_USER:-forge}
+      S3_SECRET_KEY: ${S3_ROOT_PASSWORD:?définissez S3_ROOT_PASSWORD dans .env}
+    ports: ["${S3_PORT:-58333}:8333"]
+    volumes: [s3data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9333/cluster/status >/dev/null || exit 1"]
+      interval: 5s
+      retries: 20
+
   api:
     build: { context: ., dockerfile: server/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-forge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-forgeagent}
-      REDIS_URL: redis://redis:6379
-      QUEUE_DRIVER: bullmq
+      <<: *app-env
       RUN_WORKERS_IN_API: "false"
       SEED_ON_BOOT: ${SEED_ON_BOOT:-true}
     ports: ["${API_PORT:-8787}:8787"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      s3: { condition: service_healthy }
 
   worker:
     build: { context: ., dockerfile: server/Dockerfile }
     command: ["node", "dist/worker.js"]
+    # No HTTP server here: the image's /health probe does not apply to the worker.
+    healthcheck: { disable: true }
     env_file: .env
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-forge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-forgeagent}
-      REDIS_URL: redis://redis:6379
-      QUEUE_DRIVER: bullmq
+    environment: *app-env
     depends_on:
       api: { condition: service_healthy }
 
 volumes:
-  pgdata:
+  pgdata_v2:
+  s3data:

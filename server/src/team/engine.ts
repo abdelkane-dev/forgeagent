@@ -11,7 +11,7 @@ import { security } from '../../agents/security'
 import { supervisor } from '../../agents/supervisor'
 import { tester } from '../../agents/tester'
 import { config } from '../config'
-import { asAgent, scoped, schema as s, type Tx } from '../db/client'
+import { asAgent, scoped, schema as s, type Tx, serial } from '../db/client'
 import { audit } from '../lib/audit'
 import { bus } from '../lib/bus'
 import { newId, sha256, signCapability, verifyCapability } from '../lib/crypto'
@@ -317,10 +317,10 @@ async function execute(agentId: string, taskId: string, cap: string) {
   /** Tokens are imputed to the target agent's usage, whatever the outcome. */
   const settle = (tx: Tx, patch: Partial<TaskRow>) => {
     const cost = costOf(model, used)
-    return Promise.all([
-      tx.update(s.teamTasks).set({ ...patch, tokens: tokens(), cost, durationMs: Date.now() - t0, finishedAt: new Date().toISOString() }).where(eq(s.teamTasks.id, taskId)),
-      tx.update(s.teamRequests).set({ tokens: sql`${s.teamRequests.tokens} + ${tokens()}`, cost: sql`${s.teamRequests.cost} + ${cost}` }).where(eq(s.teamRequests.id, task.requestId)),
-      tokens() ? recordUsage(tx, agentId, { source: 'team', model, tokensIn: used.input, tokensOut: used.output, environment: 'test', refId: taskId, cost }) : null,
+    return serial([
+      () => tx.update(s.teamTasks).set({ ...patch, tokens: tokens(), cost, durationMs: Date.now() - t0, finishedAt: new Date().toISOString() }).where(eq(s.teamTasks.id, taskId)),
+      () => tx.update(s.teamRequests).set({ tokens: sql`${s.teamRequests.tokens} + ${tokens()}`, cost: sql`${s.teamRequests.cost} + ${cost}` }).where(eq(s.teamRequests.id, task.requestId)),
+      async () => (tokens() ? recordUsage(tx, agentId, { source: 'team', model, tokensIn: used.input, tokensOut: used.output, environment: 'test', refId: taskId, cost }) : null),
     ])
   }
 

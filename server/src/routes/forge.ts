@@ -4,7 +4,7 @@ import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
 import type { TeamAgentInfo, TeamRequest } from '@shared/types'
 import { config } from '../config'
-import { scoped, schema as s, type Tx } from '../db/client'
+import { scoped, schema as s, type Tx, serial } from '../db/client'
 import { bus } from '../lib/bus'
 import { notFound } from '../lib/errors'
 import { route, userCtx } from '../http/router'
@@ -30,10 +30,9 @@ async function requestsOf(tx: Tx, where?: ReturnType<typeof eq>, limit = 30): Pr
 async function replay(tx: Tx, requestId: string, agentId?: string) {
   const [request] = await requestsOf(tx, eq(s.teamRequests.id, requestId), 1)
   if (!request || (agentId && request.agentId !== agentId)) throw notFound('Demande')
-  const [tasks, events] = await Promise.all([
-    tx.select().from(s.teamTasks).where(eq(s.teamTasks.requestId, requestId)).orderBy(asc(s.teamTasks.createdAt)),
-    tx.select().from(s.teamEvents).where(eq(s.teamEvents.requestId, requestId)).orderBy(asc(s.teamEvents.id)),
-  ])
+  const [tasks, events] = await serial([
+    () => tx.select().from(s.teamTasks).where(eq(s.teamTasks.requestId, requestId)).orderBy(asc(s.teamTasks.createdAt)),
+    () => tx.select().from(s.teamEvents).where(eq(s.teamEvents.requestId, requestId)).orderBy(asc(s.teamEvents.id))])
   return { request, tasks, events }
 }
 

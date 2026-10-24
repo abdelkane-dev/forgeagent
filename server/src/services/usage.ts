@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 import type { UsageSummary } from '@shared/types'
-import { schema as s, type Tx } from '../db/client'
+import { schema as s, type Tx, serial } from '../db/client'
 import { costOf } from '../llm/types'
 
 type Source = 'run' | 'team' | 'eval' | 'workflow' | 'embedding'
@@ -39,20 +39,20 @@ export async function usageSummary(tx: Tx, agentId: string): Promise<UsageSummar
   const since30 = new Date(Date.now() - 29 * 86_400_000)
   since30.setHours(0, 0, 0, 0)
   const where = and(eq(s.usageCosts.agentId, agentId), gte(s.usageCosts.at, since30.toISOString()))
-  const [totals, byModel, bySource, byDay, runs] = await Promise.all([
-    spent(tx, agentId),
-    tx
+  const [totals, byModel, bySource, byDay, runs] = await serial([
+    () => spent(tx, agentId),
+    () => tx
       .select({ model: s.usageCosts.model, tokens: sql<number>`sum(${s.usageCosts.tokensIn} + ${s.usageCosts.tokensOut})::int`, cost: sql<number>`sum(${s.usageCosts.cost})::float8` })
       .from(s.usageCosts)
       .where(where)
       .groupBy(s.usageCosts.model)
       .orderBy(desc(sql`3`)),
-    tx
+    () => tx
       .select({ source: s.usageCosts.source, tokens: sql<number>`sum(${s.usageCosts.tokensIn} + ${s.usageCosts.tokensOut})::int`, cost: sql<number>`sum(${s.usageCosts.cost})::float8` })
       .from(s.usageCosts)
       .where(where)
       .groupBy(s.usageCosts.source),
-    tx
+    () => tx
       .select({
         day: sql<string>`to_char(date_trunc('day', ${s.usageCosts.at}), 'YYYY-MM-DD')`,
         cost: sql<number>`sum(${s.usageCosts.cost})::float8`,
@@ -61,14 +61,13 @@ export async function usageSummary(tx: Tx, agentId: string): Promise<UsageSummar
       .from(s.usageCosts)
       .where(where)
       .groupBy(sql`1`),
-    tx
+    () => tx
       .select({
         today: sql<number>`count(*) filter (where ${s.runs.startedAt} >= ${startOfDay()})::int`,
         month: sql<number>`count(*)::int`,
       })
       .from(s.runs)
-      .where(and(eq(s.runs.agentId, agentId), gte(s.runs.startedAt, startOfMonth()), eq(s.runs.environment, 'production'))),
-  ])
+      .where(and(eq(s.runs.agentId, agentId), gte(s.runs.startedAt, startOfMonth()), eq(s.runs.environment, 'production')))])
   const days = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(since30.getTime() + i * 86_400_000)
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

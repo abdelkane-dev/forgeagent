@@ -1,6 +1,6 @@
 import { desc, eq, inArray } from 'drizzle-orm'
 import type { AgentDoc } from '@shared/types'
-import { schema as s, type Tx } from '../db/client'
+import { schema as s, type Tx, serial } from '../db/client'
 import { isSensitive } from '../domain/actions'
 
 /**
@@ -10,14 +10,13 @@ import { isSensitive } from '../domain/actions'
 export async function generateDoc(tx: Tx, agentId: string) {
   const [a] = await tx.select().from(s.agents).where(eq(s.agents.id, agentId))
   if (!a) return
-  const [skills, integrations, suites, versions, members, projects] = await Promise.all([
-    tx.select({ name: s.skills.name }).from(s.agentSkills).innerJoin(s.skills, eq(s.skills.id, s.agentSkills.skillId)).where(eq(s.agentSkills.agentId, agentId)),
-    tx.select().from(s.integrations).where(eq(s.integrations.agentId, agentId)),
-    tx.select().from(s.evalSuites).where(eq(s.evalSuites.agentId, agentId)),
-    tx.select().from(s.agentVersions).where(eq(s.agentVersions.agentId, agentId)).orderBy(desc(s.agentVersions.version)).limit(10),
-    tx.select({ role: s.agentMembers.role }).from(s.agentMembers).where(eq(s.agentMembers.agentId, agentId)),
-    tx.select({ name: s.projects.name }).from(s.agentProjects).innerJoin(s.projects, eq(s.projects.id, s.agentProjects.projectId)).where(eq(s.agentProjects.agentId, agentId)),
-  ])
+  const [skills, integrations, suites, versions, members, projects] = await serial([
+    () => tx.select({ name: s.skills.name }).from(s.agentSkills).innerJoin(s.skills, eq(s.skills.id, s.agentSkills.skillId)).where(eq(s.agentSkills.agentId, agentId)),
+    () => tx.select().from(s.integrations).where(eq(s.integrations.agentId, agentId)),
+    () => tx.select().from(s.evalSuites).where(eq(s.evalSuites.agentId, agentId)),
+    () => tx.select().from(s.agentVersions).where(eq(s.agentVersions.agentId, agentId)).orderBy(desc(s.agentVersions.version)).limit(10),
+    () => tx.select({ role: s.agentMembers.role }).from(s.agentMembers).where(eq(s.agentMembers.agentId, agentId)),
+    () => tx.select({ name: s.projects.name }).from(s.agentProjects).innerJoin(s.projects, eq(s.projects.id, s.agentProjects.projectId)).where(eq(s.agentProjects.agentId, agentId))])
   const connectorIds = a.tools.map((t) => t.connectorId)
   const connectors = connectorIds.length ? await tx.select().from(s.connectors).where(inArray(s.connectors.id, connectorIds)) : []
   const list = (xs: string[], empty = '_Aucun._') => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : empty)

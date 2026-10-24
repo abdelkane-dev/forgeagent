@@ -82,3 +82,13 @@ export function scoped<T>(ctx: Ctx, fn: (tx: Tx) => Promise<T>): Promise<T> {
 
 /** Shorthand for work done by the platform on behalf of one agent (runtime, workers, team tasks). */
 export const asAgent = <T,>(agentId: string, fn: (tx: Tx) => Promise<T>) => scoped({ mode: 'task', agentId }, fn)
+
+/**
+ * Runs queries one after the other. A transaction holds ONE connection: pg queues concurrent
+ * queries on it but warns (and pg@9 will refuse), so queries of a transaction never run in parallel.
+ */
+export async function serial<const T extends readonly (() => Promise<unknown>)[]>(fns: T): Promise<{ -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> }> {
+  const out: unknown[] = []
+  for (const fn of fns) out.push(await fn())
+  return out as { -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> }
+}

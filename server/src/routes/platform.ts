@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, inArray, sql } from 'drizzle-orm'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { Overview } from '@shared/types'
-import { db, scoped, schema as s } from '../db/client'
+import { db, scoped, schema as s, serial } from '../db/client'
 import { platformAudit } from '../lib/audit'
 import { newId } from '../lib/crypto'
 import { conflict, notFound } from '../lib/errors'
@@ -22,9 +22,9 @@ export function platformRoutes(app: Hono<AppEnv>) {
       const midnight = new Date(new Date().setHours(0, 0, 0, 0)).toISOString()
       const week = new Date(new Date().setHours(0, 0, 0, 0) - 6 * DAY).toISOString()
       const prod = eq(s.runs.environment, 'production')
-      const [[agents], [day], [today], [pending], byDay] = await Promise.all([
-        tx.select({ n: sql<number>`count(*)::int`, active: sql<number>`count(*) filter (where ${s.agents.status} = 'active')::int` }).from(s.agents),
-        tx
+      const [[agents], [day], [today], [pending], byDay] = await serial([
+        () => tx.select({ n: sql<number>`count(*)::int`, active: sql<number>`count(*) filter (where ${s.agents.status} = 'active')::int` }).from(s.agents),
+        () => tx
           .select({
             runs: sql<number>`count(*)::int`,
             ok: sql<number>`count(*) filter (where ${s.runs.status} = 'ok')::int`,
@@ -32,9 +32,9 @@ export function platformRoutes(app: Hono<AppEnv>) {
           })
           .from(s.runs)
           .where(and(gte(s.runs.startedAt, since), prod)),
-        tx.select({ cost: sql<number>`coalesce(sum(${s.usageCosts.cost}), 0)::float8` }).from(s.usageCosts).where(and(gte(s.usageCosts.at, midnight), eq(s.usageCosts.environment, 'production'))),
-        tx.select({ n: sql<number>`count(*)::int` }).from(s.approvals).where(eq(s.approvals.status, 'pending')),
-        tx
+        () => tx.select({ cost: sql<number>`coalesce(sum(${s.usageCosts.cost}), 0)::float8` }).from(s.usageCosts).where(and(gte(s.usageCosts.at, midnight), eq(s.usageCosts.environment, 'production'))),
+        () => tx.select({ n: sql<number>`count(*)::int` }).from(s.approvals).where(eq(s.approvals.status, 'pending')),
+        () => tx
           .select({
             day: sql<string>`to_char(date_trunc('day', ${s.runs.startedAt}), 'YYYY-MM-DD')`,
             runs: sql<number>`count(*)::int`,
@@ -42,8 +42,7 @@ export function platformRoutes(app: Hono<AppEnv>) {
           })
           .from(s.runs)
           .where(and(gte(s.runs.startedAt, week), prod))
-          .groupBy(sql`1`),
-      ])
+          .groupBy(sql`1`)])
       const fmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric' })
       const runsByDay = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(new Date().setHours(0, 0, 0, 0) - (6 - i) * DAY)

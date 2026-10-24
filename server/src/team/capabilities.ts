@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
-import { asAgent, schema as s } from '../db/client'
+import { asAgent, schema as s, serial } from '../db/client'
 import { ACTIONS } from '../domain/actions'
 import { verifyCapability } from '../lib/crypto'
 import { runChecks } from '../runtime/checks'
@@ -49,7 +49,7 @@ export function capabilitiesFor<R extends TeamRole>(role: R, agentId: string, re
     // Platform catalogues: shared definitions, no agent data.
     readCatalog: () =>
       as(async (tx) => {
-        const [skills, connectors] = await Promise.all([tx.select().from(s.skills), tx.select().from(s.connectors)])
+        const [skills, connectors] = await serial([() => tx.select().from(s.skills), () => tx.select().from(s.connectors)])
         return {
           actions: Object.entries(ACTIONS).map(([name, a]) => ({ name, ...a })),
           skills: skills.map((k) => ({ id: k.id, name: k.name, description: k.description })),

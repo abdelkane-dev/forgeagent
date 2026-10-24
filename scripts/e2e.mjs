@@ -1,6 +1,7 @@
 // End-to-end journey through the real stack: console (Vite) + API (docker compose or server dev).
-// Create an agent, add a skill, test it, integrate it into the demo site, talk to it through the widget,
-// send a console → site event, read the logs, and ask the internal team for an agent.
+// Forge an agent with the internal team, feed its knowledge, test it, give it a widget key, connect the
+// demo site, talk to it through the widget, send a console → site event, read its logs and audit,
+// then sign in as another user and check that the agent is invisible to them.
 // Usage: npm run test:e2e   (CONSOLE_URL, API_URL, E2E_EMAIL, E2E_PASSWORD to override)
 import { mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -34,88 +35,77 @@ const run = async (label, fn) => {
   }
 }
 
-const name = `Agent E2E ${new Date().toISOString().slice(11, 19)}`
 let agentId = ''
 let pubKey = ''
 
-await run('connexion à la console', async () => {
+const signIn = async (email) => {
   await page.goto(`${CONSOLE}/login`)
-  await page.locator('#l-email').fill(EMAIL)
+  await page.locator('#l-email').fill(email)
   await page.locator('#l-pass').fill(PASSWORD)
   await page.getByRole('button', { name: 'Se connecter' }).click()
   await page.waitForURL(/\/app$/)
   await page.getByRole('heading', { name: 'Tableau de bord' }).waitFor()
-})
+}
 
-await run('créer un agent avec l’assistant en 7 étapes', async () => {
+await run('connexion à la console', () => signIn(EMAIL))
+
+await run('forger un agent avec La Forge (agent en Démarrage puis Validé)', async () => {
   await page.goto(`${CONSOLE}/app/agents/new`)
-  await page.locator('#name').fill(name)
-  await page.locator('#mission').fill('Surveille les erreurs de Bonaco Pro et ouvre un ticket. Ne redémarre jamais un service.')
-  await page.getByRole('button', { name: 'Bonaco Pro' }).waitFor()
-  await page.getByRole('button', { name: 'Suivant' }).click()
-  await page.getByRole('radio', { name: /^Surveillance/ }).click()
-  await page.getByRole('button', { name: 'Suivant' }).click()
-  await page.getByLabel('Accès à Journaux applicatifs').selectOption('read')
-  await page.getByRole('button', { name: 'Suivant' }).click()
-  await page.getByRole('group', { name: 'Actions autorisées' }).getByRole('button', { name: 'Lire les journaux applicatifs' }).click()
-  await page.getByRole('group', { name: 'Actions autorisées' }).getByRole('button', { name: 'Créer un ticket' }).click()
-  for (const title of ['Skills', 'Intégration', 'Vérification']) {
-    await page.getByRole('button', { name: 'Suivant' }).click()
-    await page.getByRole('heading', { name: title }).waitFor()
-  }
-  await page.getByRole('button', { name: 'Créer l’agent' }).click()
-  await page.waitForURL(/\/app\/agents\/agt_[a-z0-9]+\?created=1/, { timeout: 30_000 })
+  await page.locator('#f-brief').fill('Surveille les erreurs 5xx et la latence de Bonaco Pro, ouvre un ticket et alerte l’équipe. Ne redémarre jamais un service.')
+  await page.locator('form').getByRole('button', { name: 'Forger un agent' }).click()
+  await page.waitForURL(/\/app\/agents\/agt_[a-z0-9]+\?tab=overview/, { timeout: 30_000 })
   agentId = page.url().match(/agt_[a-z0-9]+/)[0]
-  await page.getByRole('heading', { name }).waitFor()
+  await page.locator('header').getByText('Validé', { exact: true }).waitFor({ timeout: 60_000 })
+  await page.screenshot({ path: `${OUT}/01-forged-agent.png` })
 })
 
-await run('ajouter une skill (publie une nouvelle version)', async () => {
-  await page.goto(`${CONSOLE}/app/agents/${agentId}?tab=skills`)
-  const row = page.locator('div', { has: page.getByText('Résumé', { exact: true }) }).filter({ has: page.getByRole('button', { name: 'Ajouter' }) }).last()
-  await row.getByRole('button', { name: 'Ajouter' }).click()
-  await page.getByText('v2 publiée').waitFor()
-  await page.getByRole('button', { name: 'Retirer' }).first().waitFor()
+await run('l’audit de l’agent contient les échanges de l’équipe', async () => {
+  await page.goto(`${CONSOLE}/app/agents/${agentId}?tab=audit`)
+  await page.getByText('team.request.done').first().waitFor()
 })
 
-await run('tester l’agent dans le bac à sable', async () => {
-  await page.goto(`${CONSOLE}/app/playground?agent=${agentId}`)
+await run('activer l’agent', async () => {
+  await page.goto(`${CONSOLE}/app/agents/${agentId}?tab=overview`)
+  await page.getByRole('button', { name: 'Activer' }).click()
+  await page.locator('header').getByText('Actif', { exact: true }).waitFor()
+})
+
+await run('ajouter une connaissance et la retrouver par recherche sémantique', async () => {
+  await page.goto(`${CONSOLE}/app/agents/${agentId}?tab=knowledge`)
+  await page.locator('#k-name').fill('runbook.md')
+  await page.locator('#k-content').fill('En cas d’erreur 5xx, ouvrir un ticket de gravité haute et prévenir #incidents.')
+  await page.getByRole('button', { name: 'Indexer' }).click()
+  await page.getByText(/1 extrait/).first().waitFor({ timeout: 30_000 })
+  await page.getByLabel('Question').fill('que faire en cas d’erreur 5xx')
+  await page.getByRole('button', { name: 'Chercher', exact: true }).click()
+  await page.getByText('runbook.md').nth(1).waitFor()
+})
+
+await run('tester l’agent en environnement de test', async () => {
+  await page.goto(`${CONSOLE}/app/agents/${agentId}?tab=tests`)
   await page.getByRole('button', { name: 'Erreur 500 sur /api/invoices' }).click()
   await page.getByText(/Analyse terminée/).first().waitFor({ timeout: 30_000 })
-  await page.getByText('logs_query').first().waitFor()
-  await page.screenshot({ path: `${OUT}/01-playground.png` })
+  await page.screenshot({ path: `${OUT}/02-test.png` })
 })
 
-await run('créer une clé publiable de widget', async () => {
-  await page.goto(`${CONSOLE}/app/integrations?tab=keys`)
-  await page.getByRole('button', { name: 'Créer une clé' }).click()
+await run('créer la clé publiable de cet agent', async () => {
+  await page.goto(`${CONSOLE}/app/agents/${agentId}?tab=access`)
   await page.locator('#k-name').fill('Widget E2E')
   await page.locator('#k-scope').selectOption('publishable')
-  await page.getByRole('button', { name: 'Créer la clé' }).click()
-  const code = page.getByRole('dialog').locator('code', { hasText: 'fa_pub_' })
-  pubKey = (await code.textContent()).trim()
-  await page.getByRole('button', { name: 'J’ai copié la clé' }).click()
-})
-
-await run('autoriser le domaine du site de démo dans le projet', async () => {
-  await page.goto(`${CONSOLE}/app/projects/prj_bonaco`)
-  await page.getByRole('heading', { name: 'Bonaco Pro' }).waitFor()
-  await page.getByLabel('Nouveau domaine').waitFor()
-  const host = new URL(API).host
-  if (!(await page.getByRole('button', { name: `Retirer ${host}` }).count())) {
-    await page.getByLabel('Nouveau domaine').fill(host)
-    await page.getByLabel('Nouveau domaine').press('Enter')
-    await page.getByRole('button', { name: 'Enregistrer' }).click()
-    await page.getByText('Projet enregistré').waitFor()
-  }
+  await page.getByRole('button', { name: 'Créer', exact: true }).click()
+  pubKey = (await page.locator('code', { hasText: 'fa_pub_' }).textContent()).trim()
 })
 
 const demoUrl = () => `${API}/demo-site?agent=${agentId}&key=${pubKey}`
 
-await run('connecter le site de démo à l’agent (widget détecté)', async () => {
-  await page.goto(`${CONSOLE}/app/agents/${agentId}?tab=site`)
-  await page.locator('#s-url').fill(demoUrl())
+await run('relier le site de démo (origine autorisée, widget détecté)', async () => {
+  await page.goto(`${CONSOLE}/app/agents/${agentId}?tab=integration`)
+  await page.locator('#i-name').fill('Site de démo')
+  await page.locator('#i-url').fill(demoUrl())
+  await page.getByRole('button', { name: 'Relier', exact: true }).click()
+  await page.getByText(new URL(API).origin, { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Vérifier' }).click()
-  await page.getByText('Connecté', { exact: true }).waitFor({ timeout: 20_000 })
+  await page.getByText(/Connecté/).first().waitFor({ timeout: 20_000 })
 })
 
 const site = await context.newPage()
@@ -124,34 +114,40 @@ await run('dialoguer avec l’agent via le widget du site', async () => {
   await site.getByRole('button', { name: 'Ouvrir l’assistant' }).click()
   await site.getByLabel('Message').fill('Erreur 500 sur la page facturation')
   await site.getByLabel('Message').press('Enter')
-  await site.locator('.m.a', { hasText: 'Analyse terminée' }).waitFor({ timeout: 30_000 })
-  await site.screenshot({ path: `${OUT}/02-demo-site-widget.png` })
+  await site.locator('.m.a').filter({ hasText: /\S/ }).last().waitFor({ timeout: 30_000 })
+  await site.screenshot({ path: `${OUT}/03-demo-site-widget.png` })
 })
 
 await run('envoyer un événement de la console au site (ping → pong)', async () => {
   await page.bringToFront()
-  await page.locator('#s-ev').selectOption('ping')
-  await page.getByRole('button', { name: 'Envoyer' }).click()
+  await page.getByLabel('Événement').selectOption('ping')
+  await page.getByRole('button', { name: 'Envoyer', exact: true }).click()
   await page.getByText(/pong depuis/).waitFor({ timeout: 15_000 })
-  await page.screenshot({ path: `${OUT}/03-site-events.png` })
 })
 
-await run('voir les logs de l’agent', async () => {
-  await page.goto(`${CONSOLE}/app/agents/${agentId}?tab=logs`)
-  const log = page.getByRole('log', { name: 'Journal en direct' })
-  await log.getByText(/widget · entrée reçue/).first().waitFor()
-  await log.getByText(/événement ping → site/).first().waitFor()
+await run('voir les logs de cet agent', async () => {
+  await page.goto(`${CONSOLE}/app/logs?agent=${agentId}`)
+  await page.getByRole('log').getByText(/widget|site/).first().waitFor({ timeout: 15_000 })
   await page.screenshot({ path: `${OUT}/04-logs.png` })
 })
 
-await run('demander un agent à l’équipe interne et suivre la demande', async () => {
-  await page.goto(`${CONSOLE}/app/internal-team`)
-  await page.getByRole('button', { name: 'Nouvelle demande' }).click()
-  await page.locator('#tr-brief').fill('Un agent de surveillance pour Bonaco Pro : erreurs 5xx et latence, alerte l’équipe.')
-  await page.getByRole('button', { name: 'Envoyer à l’équipe' }).click()
-  await page.getByLabel('Détail de la demande').getByText('Terminée', { exact: true }).waitFor({ timeout: 45_000 })
-  await page.getByRole('link', { name: 'Ouvrir l’agent créé' }).waitFor()
-  await page.screenshot({ path: `${OUT}/05-internal-team.png`, fullPage: true })
+await run('La Forge affiche la demande et l’équipe', async () => {
+  await page.goto(`${CONSOLE}/app/forge`)
+  await page.getByRole('heading', { name: 'Le Maître de Forge' }).waitFor()
+  await page.getByRole('button', { name: /construction/ }).first().click()
+  await page.getByLabel('Échanges dans l’ordre').getByText('request.done').waitFor()
+  await page.screenshot({ path: `${OUT}/05-forge.png`, fullPage: true })
+})
+
+await run('un autre utilisateur ne voit pas cet agent', async () => {
+  await page.getByRole('button', { name: 'Se déconnecter' }).click()
+  await page.waitForURL(/\/login/)
+  await signIn('theo@bonaco.pro')
+  await page.goto(`${CONSOLE}/app/agents`)
+  await page.getByRole('link', { name: 'Assistant d’administration' }).first().waitFor()
+  if (await page.getByText('Gardien technique').count()) throw new Error('Théo voit un agent dont il n’est pas membre')
+  await page.goto(`${CONSOLE}/app/agents/${agentId}`)
+  await page.getByText('Agent introuvable').waitFor()
 })
 
 await browser.close()

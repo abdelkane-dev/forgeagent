@@ -33,7 +33,15 @@ export const useMe = () => useQuery({ queryKey: keys.me, queryFn: api.auth.me, r
 export const useOverview = () => useQuery({ queryKey: keys.overview, queryFn: api.overview.get })
 export const useMyApprovals = () => useQuery({ queryKey: keys.myApprovals, queryFn: api.approvals.mine })
 export const useAgents = () => useQuery({ queryKey: keys.agents, queryFn: api.agents.list })
-export const useAgent = (id: ID | undefined) => useQuery({ queryKey: keys.agent(id ?? ''), queryFn: () => api.agents.get(id!), enabled: !!id, retry: false })
+export const useAgent = (id: ID | undefined) =>
+  useQuery({
+    queryKey: keys.agent(id ?? ''),
+    queryFn: () => api.agents.get(id!),
+    enabled: !!id,
+    retry: false,
+    // While La Forge builds the agent, follow its state live.
+    refetchInterval: (q) => (q.state.data?.status === 'starting' ? 2000 : false),
+  })
 
 export const useMembers = (id?: ID) => useAgentQuery(id, 'members', api.members.list)
 export const useKeys = (id?: ID) => useAgentQuery(id, 'keys', api.keys.list)

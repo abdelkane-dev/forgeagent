@@ -9,6 +9,8 @@ if (existsSync('.env')) {
 const hex = (n) => randomBytes(n).toString('hex')
 const env = readFileSync('.env.example', 'utf8')
   .replace(/^POSTGRES_PASSWORD=.*$/m, `POSTGRES_PASSWORD=${hex(16)}`)
+  .replace(/^APP_DB_PASSWORD=.*$/m, `APP_DB_PASSWORD=${hex(16)}`)
+  .replace(/^S3_ROOT_PASSWORD=.*$/m, `S3_ROOT_PASSWORD=${hex(16)}`)
   .replace(/^KEY_PEPPER=.*$/m, `KEY_PEPPER=${hex(24)}`)
   .replace(/^ENCRYPTION_KEY=.*$/m, `ENCRYPTION_KEY=${hex(32)}`)
   .replace(/^SEED_PASSWORD=.*$/m, `SEED_PASSWORD=forgeagent-demo`)
