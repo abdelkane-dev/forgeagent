@@ -17,6 +17,8 @@ async function main() {
     const r = await seed()
     if (!r.skipped) logger.info('base initialisée avec les données de démonstration')
   }
+  // From here on the process only talks to the database as forge_app (RLS always applies).
+  await database.lockToAppRole()
   if (config.RUN_WORKERS_IN_API) {
     startTeamWorkers()
     startBackgroundJobs()

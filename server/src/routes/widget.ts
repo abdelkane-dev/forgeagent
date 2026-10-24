@@ -1,54 +1,47 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { Context, Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
 import { config } from '../config'
-import { db, schema as s } from '../db/client'
+import { asAgent, schema as s } from '../db/client'
 import { bus } from '../lib/bus'
-import { hashApiKey } from '../lib/crypto'
 import { badRequest, forbidden, HttpError, tooMany, unauthorized } from '../lib/errors'
 import { hit } from '../lib/rate-limit'
 import type { AppEnv } from '../http/types'
 import { runAgent } from '../runtime/run-agent'
-import { widgetConnected } from '../runtime/site'
+import { ackSiteEvent, siteChannel } from '../runtime/site'
+import { resolveKey } from '../services/auth'
 import { WIDGET_JS } from '../widget/widget-js'
 
-/** Does an origin belong to the project's allowed domains? `example.com` also covers its subdomains. */
-export function originAllowed(origin: string, domains: string[]) {
-  let u: URL
+/** Exact origin match (scheme, host and port) against the agent's own allowed origins. */
+export function originAllowed(origin: string, allowed: string[]) {
+  let o: string
   try {
-    u = new URL(origin)
+    o = new URL(origin).origin.toLowerCase()
   } catch {
     return false
   }
-  return domains.some((d) => {
-    const dl = d.toLowerCase()
-    if (dl.includes(':')) return u.host.toLowerCase() === dl
-    const h = u.hostname.toLowerCase()
-    return h === dl || h.endsWith(`.${dl}`)
-  })
+  return allowed.some((a) => a.toLowerCase().replace(/\/$/, '') === o)
 }
 
 /**
- * Publishable key → project → agent of that project → page origin in the project's allowed domains.
+ * Publishable key of THIS agent → page origin in THIS agent's allowed origins.
  * Every widget call goes through this; nothing else is trusted from the page.
  */
 async function authorize(c: Context<AppEnv>, key: string | undefined, agentId: string | undefined) {
-  if (!key || !/^fa_pub_[a-z0-9]{20,}$/.test(key) || !agentId || !/^[a-z]+_[a-z0-9]+$/.test(agentId)) throw unauthorized('Clé ou agent manquant')
-  const [k] = await db.select().from(s.apiKeys).where(and(eq(s.apiKeys.keyHash, hashApiKey(key)), isNull(s.apiKeys.revokedAt), eq(s.apiKeys.scope, 'publishable')))
-  if (!k?.projectId) throw unauthorized('Clé de widget invalide')
-  const [link] = await db.select().from(s.agentProjects).where(and(eq(s.agentProjects.agentId, agentId), eq(s.agentProjects.projectId, k.projectId)))
-  if (!link) throw forbidden('Cet agent n’appartient pas au projet de la clé')
-  const [project] = await db.select().from(s.projects).where(eq(s.projects.id, k.projectId))
+  if (!key || !/^fa_pub_[a-z0-9]{20,}$/.test(key) || !agentId || !/^agt_[a-z0-9]{4,16}$/.test(agentId)) throw unauthorized('Clé ou agent manquant')
+  const k = await resolveKey(key)
+  if (!k || k.scope !== 'publishable' || k.agentId !== agentId) throw unauthorized('Clé de widget invalide pour cet agent')
+  const [agent] = await asAgent(agentId, (tx) => tx.select({ origins: s.agents.allowedOrigins, status: s.agents.status }).from(s.agents).where(eq(s.agents.id, agentId)))
+  if (!agent) throw unauthorized('Clé de widget invalide pour cet agent')
   // Same-origin GETs (EventSource on a page served by the API itself) carry no Origin header:
   // Sec-Fetch-Site cannot be set by page scripts, so it safely identifies the API's own origin.
   const referer = c.req.header('referer')
   const origin =
     c.req.header('origin') ??
     (c.req.header('sec-fetch-site') === 'same-origin' ? new URL(config.PUBLIC_URL).origin : referer ? new URL(referer).origin : undefined)
-  if (!origin || !originAllowed(origin, project.allowedDomains)) throw forbidden(`Origine non autorisée pour ce projet : ajoutez le domaine dans Projets › Domaines autorisés`)
-  void db.update(s.apiKeys).set({ lastUsedAt: new Date().toISOString() }).where(eq(s.apiKeys.id, k.id)).catch(() => null)
-  return { origin, keyId: k.id }
+  if (!origin || !originAllowed(origin, agent.origins)) throw forbidden('Origine non autorisée pour cet agent : ajoutez-la dans Intégration › Origines autorisées')
+  return { origin, keyId: k.keyId }
 }
 
 const allow = (c: Context<AppEnv>, origin: string) => {
@@ -78,13 +71,13 @@ export function registerWidget(app: Hono<AppEnv>) {
       const raw = await c.req.text()
       if (raw.length > 20_000) throw badRequest('Message trop long')
       const body = z
-        .object({ key: z.string(), agent: z.string(), input: z.string().trim().min(1).max(2000), history: z.array(z.object({ role: z.enum(['user', 'agent']), content: z.string().max(4000) })).max(10).default([]) })
+        .object({ key: z.string(), agent: z.string(), input: z.string().trim().min(1).max(2000), history: z.array(z.object({ role: z.enum(['user', 'agent']), content: z.string().max(4000) })).max(10).default([]), session: z.string().regex(/^[a-z0-9-]{8,64}$/i).optional() })
         .safeParse(JSON.parse(raw))
       if (!body.success) throw badRequest('Requête invalide')
       const { origin, keyId } = await authorize(c, body.data.key, body.data.agent)
       const ip = c.req.header('x-forwarded-for')?.split(',')[0] ?? 'local'
       if (!(await hit(`widget:${keyId}:${ip}`, 20, 60_000)).ok) throw tooMany()
-      const r = await runAgent(body.data.agent, body.data.input, { source: 'widget', history: body.data.history })
+      const r = await runAgent(body.data.agent, body.data.input, { source: 'widget', history: body.data.history, sessionId: body.data.session })
       allow(c, origin)
       // Visitors get the answer only: no tool calls, no internal ids.
       return c.json({ content: r.message.content, status: r.status })
@@ -99,12 +92,8 @@ export function registerWidget(app: Hono<AppEnv>) {
       const { origin } = await authorize(c, c.req.query('key'), agentId)
       allow(c, origin)
       return streamSSE(c, async (stream) => {
-        widgetConnected(agentId!, 1)
-        const off = bus.subscribe(`site:${agentId}`, (e) => void stream.writeSSE({ data: JSON.stringify(e) }))
-        stream.onAbort(() => {
-          off()
-          widgetConnected(agentId!, -1)
-        })
+        const off = bus.subscribe(siteChannel(agentId!), (e) => void stream.writeSSE({ data: JSON.stringify(e) }))
+        stream.onAbort(off)
         while (!stream.aborted) {
           await stream.writeSSE({ event: 'ping', data: '' })
           await stream.sleep(15_000)
@@ -120,7 +109,9 @@ export function registerWidget(app: Hono<AppEnv>) {
       const body = z.object({ key: z.string(), agent: z.string(), response: z.string().max(500) }).safeParse(JSON.parse(await c.req.text()))
       if (!body.success) throw badRequest('Requête invalide')
       const { origin } = await authorize(c, body.data.key, body.data.agent)
-      bus.publish(`site-ack:${c.req.param('id')}`, { response: body.data.response })
+      const eventId = c.req.param('id')
+      if (!/^evt_[a-z0-9]{4,16}$/.test(eventId)) throw badRequest('Événement inconnu')
+      ackSiteEvent(body.data.agent, eventId, body.data.response)
       allow(c, origin)
       return c.json({ ok: true })
     } catch (e) {
@@ -130,12 +121,12 @@ export function registerWidget(app: Hono<AppEnv>) {
 
   /** Demo site for local integration tests: a fake Bonaco Pro page embedding the real widget. */
   app.get('/demo-site', (c) => {
-    const agent = escapeHtml(c.req.query('agent') ?? 'agt_7x1pd')
+    const agent = escapeHtml(c.req.query('agent') ?? '')
     const key = escapeHtml(c.req.query('key') ?? '')
     c.header('Content-Security-Policy', `default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self'; style-src 'self' 'unsafe-inline'`)
     return c.html(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bonaco Pro · démo</title>
 <style>body{margin:0;font-family:system-ui,sans-serif;background:#f4f5f7;color:#0b0c0e}header{padding:18px 24px;background:#fff;font-weight:800}main{padding:32px 24px;max-width:760px}h1{font-size:34px;margin:0 0 8px}</style></head>
 <body><header>Bonaco Pro</header><main><h1>Administration</h1><p>Page de démonstration servie par l’API ForgeAgent (${escapeHtml(config.PUBLIC_URL)}). Le widget de l’agent est chargé ci-dessous.</p></main>
-<script src="/widget.js" data-agent="${agent}" data-project="bonaco-pro" data-key="${key}" data-title="Assistant Bonaco" defer></script></body></html>`)
+<script src="/widget.js" data-agent="${agent}" data-key="${key}" data-title="Assistant Bonaco" defer></script></body></html>`)
   })
 }

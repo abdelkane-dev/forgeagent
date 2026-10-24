@@ -7,7 +7,7 @@ import { Login, Signup } from '../http/schemas'
 import type { AppEnv } from '../http/types'
 import { acceptInvite, login, logout, me, SESSION_COOKIE, signup } from '../services/auth'
 
-const User = z.object({ id: z.string(), name: z.string(), email: z.string(), role: z.enum(['admin', 'editor', 'viewer']) })
+const User = z.object({ id: z.string(), name: z.string(), email: z.string(), platformRole: z.enum(['admin', 'member']) })
 
 function setSession(c: Context<AppEnv>, token: string) {
   setCookie(c, SESSION_COOKIE, token, {
@@ -52,5 +52,5 @@ export function authRoutes(app: Hono<AppEnv>) {
     return undefined
   })
 
-  route(app, { method: 'get', path: '/auth/me', tag: 'Auth', summary: 'Utilisateur courant', response: User }, ({ userId }) => me(userId))
+  route(app, { method: 'get', path: '/auth/me', tag: 'Auth', summary: 'Utilisateur courant', response: User }, ({ user }) => me(user!.id))
 }

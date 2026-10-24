@@ -11,6 +11,7 @@ import { startTeamWorkers } from './team/engine'
 async function main() {
   if (config.QUEUE_DRIVER !== 'bullmq') logger.warn('QUEUE_DRIVER=memory : un worker séparé ne voit pas les tâches de l’API. Utilisez bullmq.')
   await runMigrations()
+  await database.lockToAppRole()
   startTeamWorkers()
   startBackgroundJobs()
   startWebhookWorker()

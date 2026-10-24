@@ -1,5 +1,5 @@
 import { and, desc, eq } from 'drizzle-orm'
-import type { Workflow, WorkflowRun } from '@shared/types'
+import type { Workflow, WorkflowNode, WorkflowRun } from '@shared/types'
 import { asAgent, schema as s, type Tx } from '../db/client'
 import { audit } from '../lib/audit'
 import { newId } from '../lib/crypto'
@@ -23,7 +23,7 @@ export async function listWorkflows(tx: Tx, agentId: string) {
   return (await tx.select().from(s.workflows).where(eq(s.workflows.agentId, agentId)).orderBy(desc(s.workflows.updatedAt))).map(toWorkflow)
 }
 
-export async function saveWorkflow(tx: Tx, agentId: string, input: Omit<Workflow, 'agentId' | 'version' | 'updatedAt'> & { id?: string }, actor: string) {
+export async function saveWorkflow(tx: Tx, agentId: string, input: Omit<Workflow, 'id' | 'agentId' | 'version' | 'updatedAt'> & { id?: string }, actor: string) {
   if (input.nodes[0]?.kind !== 'trigger') throw badRequest('La première étape doit être un déclencheur')
   const id = input.id ?? newId('wf')
   const [existing] = await tx.select().from(s.workflows).where(and(eq(s.workflows.id, id), eq(s.workflows.agentId, agentId)))
@@ -126,7 +126,7 @@ export async function advance(agentId: string, runId: string, test: boolean) {
   })
   if (status === 'ok' && !test) void emitWebhook(agentId, 'workflow.completed', { workflowId: wf.id, runId, output: output.slice(0, 2000) })
 
-  async function executeNode(node: (typeof wf.nodes)[number], previous: string): Promise<{ status: 'ok' | 'error' | 'skipped' | 'waiting'; output: string }> {
+  async function executeNode(node: WorkflowNode, previous: string): Promise<{ status: 'ok' | 'error' | 'skipped' | 'waiting'; output: string }> {
     switch (node.kind) {
       case 'trigger':
         return { status: 'ok', output: previous }

@@ -7,15 +7,16 @@ const str = (max = 200) => z.string().trim().max(max)
 const id = z.string().regex(/^[a-z]+_[a-z0-9]+$/i, 'identifiant invalide').max(40)
 
 export const AgentType = z.enum(['conversational', 'autonomous', 'reactive', 'monitoring', 'data', 'content', 'development', 'decision', 'perception', 'orchestrator'])
-export const AgentStatus = z.enum(['active', 'paused', 'error', 'draft'])
+export const AgentStatus = z.enum(['inactive', 'starting', 'active', 'validated', 'error'])
 export const Autonomy = z.enum(['suggest_only', 'act_after_approval', 'act_alone_simple'])
 export const ClaudeModel = z.enum(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'])
-export const Role = z.enum(['admin', 'editor', 'viewer'])
+export const AgentRole = z.enum(['owner', 'editor', 'viewer'])
+export const PlatformRole = z.enum(['admin', 'member'])
 export const Channel = z.enum(['widget', 'rest', 'sdk_js', 'sdk_python', 'mcp_server', 'webhook_out'])
 
 export const Trigger = z.object({
   id: str(40),
-  kind: z.enum(['message', 'cron', 'webhook', 'db_event', 'file', 'agent']),
+  kind: z.enum(['message', 'cron', 'webhook', 'db_event', 'file']),
   label: str(120),
   config: str(300),
   enabled: z.boolean(),
@@ -33,13 +34,11 @@ export const Guardrails = z.object({
   rateLimitPerMin: z.number().int().min(1).max(600),
 })
 
-export const Permissions = z.object({
-  allowedActions: z.array(action).max(30),
-  roles: z.array(Role).max(3),
-  people: z.array(z.email().max(200)).max(50),
-})
+export const Permissions = z.object({ allowedActions: z.array(action).max(30) })
 
-export const Memory = z.object({ longTerm: z.boolean(), sharedWithProject: z.boolean(), retentionDays: z.number().int().min(1).max(3650) })
+export const Memory = z.object({ longTerm: z.boolean(), shortTermTurns: z.number().int().min(0).max(50), retentionDays: z.number().int().min(1).max(3650) })
+
+const origin = z.string().trim().max(300).regex(/^https?:\/\/[a-z0-9.-]+(:\d{2,5})?$/i, 'origine invalide (https://domaine[:port])')
 
 export const AgentDraft = z.object({
   name: str(80).min(3),
@@ -61,22 +60,23 @@ export const AgentDraft = z.object({
   permissions: Permissions,
   guardrails: Guardrails,
   costCapPerDay: z.number().min(0).max(10_000),
+  monthlyBudget: z.number().min(0).max(1_000_000).default(300),
+  allowedOrigins: z.array(origin).max(30).default([]),
   memory: Memory,
+  members: z.array(z.object({ email: z.email().max(200), role: AgentRole })).max(20).optional(),
 })
 
-/** PATCH: any subset of the draft, plus status. `versionNote` publishes a new version. */
-export const AgentPatch = AgentDraft.partial().extend({ status: AgentStatus.optional(), versionNote: str(200).optional() })
+/** PATCH: any subset of the draft. `versionNote` publishes a new version (after the regression gate). */
+export const AgentPatch = AgentDraft.omit({ members: true }).partial().extend({ versionNote: str(200).optional() })
 
 export const ProjectInput = z.object({ name: str(80).min(2), description: str(1000).default('') })
 const EnvConf = z.object({ url: z.union([z.literal(''), z.url().max(300)]), deployed: z.boolean() })
-const domain = str(253).regex(/^(localhost|[a-z0-9-]+(\.[a-z0-9-]+)+)(:\d{2,5})?$/i, 'domaine invalide')
 export const ProjectPatch = z
   .object({
     name: str(80).min(2),
     description: str(1000),
     stack: z.array(str(40)).max(20),
     environments: z.object({ test: EnvConf, staging: EnvConf, production: EnvConf }),
-    allowedDomains: z.array(domain).max(50),
   })
   .partial()
 
@@ -92,37 +92,33 @@ export const Signup = z.object({ name: str(80).min(2), email: z.email().max(200)
 export const RunInput = z.object({
   input: str(8000).min(1),
   history: z.array(z.object({ role: z.enum(['user', 'agent', 'system']), content: str(8000) })).max(40).default([]),
-  sandbox: z.boolean().default(false),
+  /** test = sandbox environment (simulated tools, not budgeted). */
+  environment: z.enum(['test', 'production']).default('production'),
+  sessionId: str(80).optional(),
 })
 
 export const SettingsPatch = z
   .object({
-    modelRouting: z.object({ simple: ClaudeModel, complex: ClaudeModel, fallback: ClaudeModel }),
-    retentionDays: z.number().int().min(1).max(3650),
-    anonymizeTraces: z.boolean(),
-    monthlyBudget: z.number().min(0).max(1_000_000),
-    budgetAlertPct: z.number().int().min(1).max(100),
     killSwitch: z.boolean(),
-    gateway: z.object({ costRouting: z.boolean(), fallback: z.boolean(), cache: z.boolean(), logging: z.boolean() }),
-    globalGuardrails: z.object({ promptInjection: z.boolean(), piiMasking: z.boolean(), humanApproval: z.boolean(), rateLimit: z.boolean(), forbiddenList: z.boolean() }),
-    otelEndpoint: z.union([z.literal(''), z.url().max(300)]),
-    notifications: z.record(str(60), z.boolean()),
-    notificationChannel: z.enum(['email', 'chat', 'both']),
+    globalGuardrails: z.object({ promptInjection: z.boolean(), piiMasking: z.boolean(), humanApproval: z.boolean(), rateLimit: z.boolean() }),
+    defaultModel: ClaudeModel,
+    retentionDays: z.number().int().min(1).max(3650),
     instanceUrl: z.url().max(300),
   })
   .partial()
 
 export const WorkflowInput = z.object({
-  id: id,
-  name: str(120),
-  agentId: id,
+  id: id.optional(),
+  name: str(120).min(2),
   published: z.boolean(),
+  trigger: z.object({ kind: z.enum(['manual', 'cron', 'webhook']), config: str(200) }),
   nodes: z
     .array(
       z.object({
         id: str(40),
-        kind: z.enum(['trigger', 'model', 'condition', 'approval', 'tool', 'subagent', 'output']),
+        kind: z.enum(['trigger', 'model', 'condition', 'approval', 'tool', 'output']),
         label: str(120),
+        config: str(2000).optional(),
         x: z.number().min(0).max(10_000),
         y: z.number().min(0).max(10_000),
         retry: z.boolean(),
@@ -131,8 +127,32 @@ export const WorkflowInput = z.object({
     .max(100),
 })
 
+const secretName = z.string().regex(/^[A-Z][A-Z0-9_]{1,63}$/, 'nom en MAJUSCULES_AVEC_TIRETS_BAS')
+
+export const MemberInput = z.object({ email: z.email().max(200), role: AgentRole })
+export const KeyInput = z.object({ name: str(80).min(2), environment: z.enum(['live', 'test']), scope: z.enum(['secret', 'publishable']).default('secret') })
+export const SecretInput = z.object({ name: secretName, value: z.string().min(1).max(8000) })
+export const IntegrationInput = z.object({
+  kind: z.enum(['website', 'app', 'service']),
+  name: str(80).min(2),
+  url: z.url().max(300),
+  environment: z.enum(['test', 'production']),
+  secretName: secretName.nullable().optional(),
+})
+export const WebhookInput = z.object({ url: z.url().max(300), events: z.array(z.enum(['run.completed', 'run.failed', 'approval.requested', 'approval.resolved', 'agent.updated', 'workflow.completed'])).min(1).max(10) })
+export const KnowledgeInput = z.object({
+  name: str(300).min(1),
+  kind: z.enum(['pdf', 'docx', 'website', 'markdown', 'text']),
+  /** Plain text content (markdown, text) or URL (website). */
+  content: z.string().max(200_000).optional(),
+  /** Uploaded file, base64 (stored under agents/<agentId>/ in object storage). */
+  file: z.string().max(14_000_000).optional(),
+})
+export const EvalCaseInput = z.object({ input: str(4000).min(1), expect: str(500) })
+export const SuiteInput = z.object({ name: str(120).min(2), regression: z.boolean().default(true), cases: z.array(EvalCaseInput).max(50).default([]) })
+
 export const CreateAgentRequest = z.object({
-  brief: str(2000).min(10),
+  brief: str(4000).min(10),
   projectId: id,
   /** Ceiling set by the user: the team can never grant more than this. */
   maxActions: z.array(action).max(30).default([]),

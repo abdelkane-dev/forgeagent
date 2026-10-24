@@ -1,26 +1,28 @@
 import { eq } from 'drizzle-orm'
-import { db, schema as s } from '../src/db/client'
+import { asAgent, database, schema as s } from '../src/db/client'
 import { runMigrations } from '../src/db/migrate'
 import { seed } from '../src/db/seed'
 import { queue } from '../src/queue'
 
 export const PASSWORD = 'demo-password-123'
 let ready: Promise<void> | null = null
+export let keys: { skipped: false; keys: Record<string, string> } = { skipped: false, keys: {} }
 
 /** Migrates and seeds the in-memory database once per test file. */
 export function setupDb() {
   ready ??= (async () => {
     await runMigrations()
-    await seed({ password: PASSWORD, quiet: true })
+    keys = (await seed({ password: PASSWORD, quiet: true })) as typeof keys
+    await database.lockToAppRole()
   })()
   return ready
 }
 
 /** Waits until every queued job has run, then returns the request row. */
-export async function settle(requestId: string) {
+export async function settle(agentId: string, requestId: string) {
   for (let i = 0; i < 50; i++) {
     await queue.idle()
-    const [r] = await db.select().from(s.teamRequests).where(eq(s.teamRequests.id, requestId))
+    const [r] = await asAgent(agentId, (tx) => tx.select().from(s.teamRequests).where(eq(s.teamRequests.id, requestId)))
     if (r.status !== 'running') return r
     await new Promise((res) => setTimeout(res, 20))
   }

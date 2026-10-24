@@ -1,17 +1,17 @@
 import type { Hono } from 'hono'
 import type { AppEnv } from '../http/types'
 import { adminRoutes } from './admin'
+import { agentSpaceRoutes } from './agent-space'
 import { agentRoutes } from './agents'
 import { authRoutes } from './auth'
-import { internalTeamRoutes } from './internal-team'
-import { opsRoutes } from './ops'
-import { resourceRoutes } from './resources'
+import { forgeRoutes } from './forge'
+import { platformRoutes } from './platform'
 
 export function registerRoutes(app: Hono<AppEnv>) {
   authRoutes(app)
+  platformRoutes(app)
   agentRoutes(app)
-  resourceRoutes(app)
-  opsRoutes(app)
+  agentSpaceRoutes(app)
+  forgeRoutes(app)
   adminRoutes(app)
-  internalTeamRoutes(app)
 }
