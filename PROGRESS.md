@@ -21,7 +21,7 @@ Légende : [x] fini · [~] en cours · [ ] à faire
 - [x] Tokens couleurs/typo/rayons/ombres/motion, thème sombre + clair persistant (`fa:theme`)
 - [x] Couche API typée + mock + transport HTTP + hooks React Query
 - [x] Logo SVG + favicon (`public/favicon.svg`, `public/logo.svg`, `LogoMark`)
-- [ ] README.md (lancer, structure, brancher le back-end)
+- [x] README.md (lancer, structure, brancher le back-end)
 
 ## Phase 2 — Design system et motion
 - [x] Composants communs : PageHeader, Section, Panel, Row, Kbd, EmptyState, ErrorState, skeletons, Async, StatusDot, Tag, UnderlineTabs, CodeBlock (copier), LogStream (terminal live), ConfirmDialog (saisie du nom), Field/NativeSelect/SwitchRow/ChipGroup, ColumnChart, Meter, KpiStrip, HexLoader, LinkButton
@@ -29,34 +29,49 @@ Légende : [x] fini · [~] en cours · [ ] à faire
 - [x] Palette ⌘K + raccourcis (G+lettre, C, T, ?, /) + dialogue d'aide
 
 ## Phase 3 — Pages
-- [ ] Landing `/`
-- [ ] Connexion `/login`
-- [ ] Documentation `/docs`
-- [ ] 404
-- [ ] Tableau de bord `/app`
-- [ ] Agents (liste, filtres, recherche) `/app/agents`
-- [ ] Assistant de création (7 étapes) `/app/agents/new`
-- [ ] Détail agent (aperçu, config, skills, déclencheurs, outils, mémoire, versions, logs, intégration, site externe) `/app/agents/:id`
-- [ ] Workflows `/app/workflows`
-- [ ] Skills `/app/skills`
-- [ ] Connaissances `/app/knowledge`
-- [ ] Modèles `/app/templates`
-- [ ] Projets + détail `/app/projects(/:id)`
-- [ ] Intégrations (snippets, site existant, application, MCP, clés API, webhooks) `/app/integrations`
-- [ ] Environnement de test `/app/playground`
-- [ ] Évaluations `/app/evals`
-- [ ] Observabilité `/app/observability`
-- [ ] Sécurité `/app/security`
-- [ ] Journal d'audit `/app/audit`
-- [ ] Coûts et usage `/app/usage`
-- [ ] Équipe `/app/team`
-- [ ] Paramètres `/app/settings`
-- [ ] Notifications `/app/notifications`
+- [x] Landing `/`
+- [x] Connexion `/login`
+- [x] Documentation `/docs`
+- [x] 404
+- [x] Tableau de bord `/app`
+- [x] Agents (liste, filtres, recherche) `/app/agents`
+- [x] Assistant de création (7 étapes, validation, brouillon auto, modèles) `/app/agents/new`
+- [x] Détail agent (aperçu, config, skills, déclencheurs, outils, mémoire, versions, logs, intégration, site externe) `/app/agents/:id`
+- [x] Workflows `/app/workflows`
+- [x] Skills `/app/skills`
+- [x] Connaissances `/app/knowledge`
+- [x] Modèles `/app/templates`
+- [x] Projets + détail `/app/projects(/:id)`
+- [x] Intégrations (snippets, site existant, application, MCP, clés API, webhooks) `/app/integrations`
+- [x] Environnement de test `/app/playground`
+- [x] Évaluations `/app/evals`
+- [x] Observabilité `/app/observability`
+- [x] Sécurité `/app/security`
+- [x] Journal d'audit `/app/audit`
+- [x] Coûts et usage `/app/usage`
+- [x] Équipe `/app/team`
+- [x] Paramètres `/app/settings`
+- [x] Notifications `/app/notifications`
 
 ## Phase 4 — Vérification
-- [ ] `npm run build` sans erreur, `npm run lint` propre
-- [ ] Parcours Playwright de chaque flux, liens morts corrigés
-- [ ] Responsive 390 / 768 / 1440, performance
+- [x] `npm run build` sans erreur, `npm run lint` propre
+- [x] Parcours Playwright de chaque flux, liens morts corrigés
+- [x] Responsive 390 / 768 / 1440, performance
 
-## Consommation (approx.)
+## Vérification (Phase 4) — résultats
+- `npm run build` : OK, aucun avertissement (vendors découpés : react, ui, motion, router, query, icons).
+- `npm run lint` (oxlint) : 0 avertissement. `tsc -b` : 0 erreur.
+- Playwright CLI : 30 routes (h1 présent, pas de débordement horizontal), 46 liens internes (0 mort), 0 erreur console.
+- Flux de bout en bout OK : création d’agent (validation + 7 étapes + redirection), suppression avec saisie du nom, validation humaine, arrêt d’urgence, clé API (secret une fois), bac à sable (injection bloquée), création de projet, palette ⌘K, raccourci G+A, état d’erreur réseau + Réessayer.
+- Inspecteur taste-skill (landing, 1440/768/390) : 0 FAIL, 5 WARN défendus : pas de photo ni de vidéo (le sujet est un logiciel : les fragments d’interface tiennent lieu d’images), tailles de police issues des fragments d’UI, légendes secondaires en gris, marge droite, respiration sous le hero.
+- Responsive contrôlé à 390 / 768 / 1440, thème clair et sombre.
+
+## Pistes après livraison
+- Brancher le back-end ressource par ressource (voir README).
+- Remplacer les liens GitHub `forgeagent/forgeagent` par l’URL réelle du dépôt.
+- Ajouter des tests unitaires (Vitest) sur `src/api/mock` et les hooks une fois le back-end défini.
+
+## Consommation (approx. : `/cost` non disponible dans cette session, estimation du contexte)
 - Phase 0–1 : ~160 k tokens (lecture du prototype, skills, scaffold, couche API)
+- Phase 2–3 : ~170 k tokens (design system, 24 pages)
+- Phase 4 : ~45 k tokens (build, lint, Playwright, inspecteur, corrections)
