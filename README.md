@@ -14,7 +14,7 @@ Chaque agent est un espace scellé : ses données, ses clés et ses coûts n’a
 ![PostgreSQL + pgvector](https://img.shields.io/badge/PostgreSQL-RLS%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)
 ![Claude](https://img.shields.io/badge/cerveau-Claude-D97757)
 
-[Démarrage rapide](#-démarrage-rapide) · [Fonctionnalités](#-fonctionnalités) · [Isolation](#-isolation-par-agent) · [La Forge](#-la-forge) · [Architecture](#-architecture) · [Contribuer](#-contribuer)
+**[▶ Essayer la démo en ligne](https://abdelkane-dev.github.io/forgeagent/)** · [Démarrage rapide](#-démarrage-rapide) · [Fonctionnalités](#-fonctionnalités) · [Isolation](#-isolation-par-agent) · [La Forge](#-la-forge) · [Architecture](#-architecture) · [Contribuer](#-contribuer)
 
 <img src="docs/assets/accueil.png" alt="Page d’accueil de ForgeAgent" width="100%" />
 
@@ -64,6 +64,7 @@ Ouvrez <http://localhost:5173/login> : les **comptes de démonstration** s’aff
 | `theo@bonaco.pro` | Membre | lecteur d’un seul agent |
 
 > [!TIP]
+> **Juste pour voir ?** La [démo en ligne](https://abdelkane-dev.github.io/forgeagent/) tourne dans le navigateur, sans serveur.
 > **Sans Docker ?** `npm run dev:demo` lance la console seule, avec des données fictives et les mêmes règles d’isolation simulées.
 > **Sans clé Claude ?** Le moteur tourne en mode **simulé**, déterministe et hors ligne. Ajoutez `ANTHROPIC_API_KEY` dans `.env` pour utiliser Claude.
 
