@@ -1,0 +1,56 @@
+# ForgeAgent back-end: PostgreSQL + Redis + API + worker.
+# 1) node scripts/init-env.mjs   (creates .env with random secrets)
+# 2) docker compose up --build
+# 3) npm run dev                 (console on http://localhost:5173)
+name: forgeagent
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-forge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définissez POSTGRES_PASSWORD dans .env}
+      POSTGRES_DB: ${POSTGRES_DB:-forgeagent}
+    ports: ["${POSTGRES_PORT:-55432}:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports: ["${REDIS_PORT:-56379}:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: { context: ., dockerfile: server/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-forge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-forgeagent}
+      REDIS_URL: redis://redis:6379
+      QUEUE_DRIVER: bullmq
+      RUN_WORKERS_IN_API: "false"
+      SEED_ON_BOOT: ${SEED_ON_BOOT:-true}
+    ports: ["${API_PORT:-8787}:8787"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker:
+    build: { context: ., dockerfile: server/Dockerfile }
+    command: ["node", "dist/worker.js"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-forge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-forgeagent}
+      REDIS_URL: redis://redis:6379
+      QUEUE_DRIVER: bullmq
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  pgdata:

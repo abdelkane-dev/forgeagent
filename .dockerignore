@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.data
+**/.env
+**/*.log
+.git
+.taste-skill
+forgeagent
+public

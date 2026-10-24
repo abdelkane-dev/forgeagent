@@ -27,6 +27,12 @@ import type {
   Trace,
   Webhook,
   Workflow,
+  User,
+  TeamAgentInfo,
+  TeamRequest,
+  TeamTask,
+  TeamEvent,
+  CreateAgentRequestInput,
 } from './types'
 
 /**
@@ -35,6 +41,14 @@ import type {
  * Swap with VITE_API_URL (see src/api/index.ts).
  */
 export interface ForgeApi {
+  auth: {
+    me(): Promise<User>
+    login(email: string, password: string): Promise<User>
+    signup(name: string, email: string, password: string): Promise<User>
+    acceptInvite(email: string, token: string, password: string): Promise<User>
+    resetRequest(email: string): Promise<void>
+    logout(): Promise<void>
+  }
   overview: { get(): Promise<Overview> }
   agents: {
     list(): Promise<Agent[]>
@@ -73,7 +87,7 @@ export interface ForgeApi {
   evals: { list(): Promise<EvalSuite[]>; run(id: ID): Promise<EvalSuite> }
   knowledge: {
     list(): Promise<KnowledgeDoc[]>
-    add(input: Pick<KnowledgeDoc, 'name' | 'kind'>): Promise<KnowledgeDoc>
+    add(input: Pick<KnowledgeDoc, 'name' | 'kind'> & { content?: string }): Promise<KnowledgeDoc>
     remove(id: ID): Promise<void>
   }
   memories: { list(agentId?: ID): Promise<MemoryItem[]>; remove(id: ID): Promise<void>; clear(agentId: ID): Promise<void> }
@@ -87,13 +101,13 @@ export interface ForgeApi {
   apiKeys: {
     list(): Promise<ApiKey[]>
     /** The full secret is returned once, at creation or rotation. */
-    create(name: string, environment: ApiKey['environment']): Promise<{ key: ApiKey; secret: string }>
+    create(name: string, environment: ApiKey['environment'], opts?: { scope?: 'secret' | 'publishable'; projectId?: ID | null }): Promise<{ key: ApiKey; secret: string }>
     rotate(id: ID): Promise<{ key: ApiKey; secret: string }>
     revoke(id: ID): Promise<void>
   }
   webhooks: {
     list(): Promise<Webhook[]>
-    create(url: string, events: string[]): Promise<Webhook>
+    create(url: string, events: string[]): Promise<Webhook & { signingSecret?: string }>
     remove(id: ID): Promise<void>
     test(id: ID): Promise<{ status: number; latencyMs: number }>
   }
@@ -110,6 +124,14 @@ export interface ForgeApi {
     toggle(id: ID, enabled: boolean): Promise<Schedule>
   }
   settings: { get(): Promise<Settings>; update(patch: Partial<Settings>): Promise<Settings> }
+  internalTeam: {
+    agents(): Promise<TeamAgentInfo[]>
+    requests(): Promise<TeamRequest[]>
+    request(id: ID): Promise<{ request: TeamRequest; tasks: TeamTask[]; events: TeamEvent[] }>
+    create(input: CreateAgentRequestInput): Promise<TeamRequest>
+    sweep(): Promise<{ requestId: ID | null }>
+    queue(): Promise<Record<string, { waiting: number; active: number }>>
+  }
   playground: {
     send(agentId: ID, input: string, history: ChatMessage[]): Promise<ChatMessage>
     checks(agentId: ID): Promise<CheckResult[]>

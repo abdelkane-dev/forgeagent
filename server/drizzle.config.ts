@@ -5,5 +5,5 @@ export default defineConfig({
   schema: './src/db/schema.ts',
   out: './drizzle',
   dialect: 'postgresql',
-  dbCredentials: { url: process.env.DATABASE_URL ?? 'postgres://forge:forge@localhost:5433/forgeagent' },
+  dbCredentials: { url: process.env.DATABASE_URL ?? 'postgres://forge:forge@localhost:55432/forgeagent' },
 })

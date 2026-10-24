@@ -57,7 +57,8 @@ const Env = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 })
 
-const parsed = Env.safeParse(process.env)
+// Empty values (`ANTHROPIC_API_KEY=`) mean "not set", so defaults apply.
+const parsed = Env.safeParse(Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== '')))
 if (!parsed.success) {
   console.error('Configuration invalide :\n' + parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n'))
   process.exit(1)

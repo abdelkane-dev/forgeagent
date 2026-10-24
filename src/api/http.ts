@@ -17,6 +17,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    // Session expired or missing: back to the sign-in page, then here.
+    const next = location.pathname + location.search
+    if (!location.pathname.startsWith('/login')) location.assign(`/login?next=${encodeURIComponent(next)}`)
+  }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`
     try {
@@ -40,6 +45,14 @@ const qs = (o: Record<string, string | undefined> = {}) => {
 }
 
 export const httpApi: ForgeApi = {
+  auth: {
+    me: () => get('/auth/me'),
+    login: (email, password) => post('/auth/login', { email, password }),
+    signup: (name, email, password) => post('/auth/signup', { name, email, password }),
+    acceptInvite: (email, token, password) => post('/auth/accept-invite', { email, token, password }),
+    resetRequest: (email) => post('/auth/reset-request', { email }),
+    logout: () => post('/auth/logout'),
+  },
   overview: { get: () => get('/overview') },
   agents: {
     list: () => get('/agents'),
@@ -106,7 +119,7 @@ export const httpApi: ForgeApi = {
   },
   apiKeys: {
     list: () => get('/api-keys'),
-    create: (name, environment) => post('/api-keys', { name, environment }),
+    create: (name, environment, opts) => post('/api-keys', { name, environment, scope: opts?.scope ?? 'secret', projectId: opts?.projectId ?? null }),
     rotate: (id) => post(`/api-keys/${id}/rotate`),
     revoke: (id) => del(`/api-keys/${id}`),
   },
@@ -136,6 +149,14 @@ export const httpApi: ForgeApi = {
     toggle: (id, enabled) => patch(`/schedules/${id}`, { enabled }),
   },
   settings: { get: () => get('/settings'), update: (p) => patch('/settings', p) },
+  internalTeam: {
+    agents: () => get('/internal-team/agents'),
+    requests: () => get('/internal-team/requests'),
+    request: (id) => get(`/internal-team/requests/${id}`),
+    create: (input) => post('/internal-team/requests', input),
+    sweep: () => post('/internal-team/sweep'),
+    queue: () => get('/internal-team/queue'),
+  },
   playground: {
     send: (agentId, input, history) => post(`/agents/${agentId}/run`, { input, history, sandbox: true }),
     checks: (agentId) => post(`/agents/${agentId}/checks`),

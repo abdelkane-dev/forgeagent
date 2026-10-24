@@ -30,3 +30,7 @@ dist-ssr
 
 # design tooling output
 .taste-skill/inspect
+.env
+.env.local
+server-dev.log
+.playwright-cli

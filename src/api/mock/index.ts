@@ -1,5 +1,5 @@
 import { ApiError, type ForgeApi } from '../client'
-import type { Agent, ChatMessage, CheckResult, ID, LogEntry } from '../types'
+import type { Agent, ChatMessage, CheckResult, ID, LogEntry, TeamEvent, TeamRequest, TeamRole, TeamTask } from '../types'
 import * as seed from './seed'
 
 /**
@@ -64,7 +64,111 @@ const ME = 'Abdoul Karim'
 const secret = (env: 'live' | 'test') =>
   `fa_${env}_${Array.from({ length: 32 }, () => 'abcdefghijkmnopqrstuvwxyz23456789'[Math.floor(Math.random() * 33)]).join('')}`
 
+const DEMO_USER = { id: 'usr_1', name: 'Abdoul Karim', email: 'abdoul@bonaco.pro', role: 'admin' as const }
+
+/* Internal team, simulated: a request walks through the roles on timers. */
+const TEAM_ROLES: { role: TeamRole; label: string; mission: string; model: string; capabilities: string[] }[] = [
+  { role: 'orchestrator', label: 'Orchestrateur', mission: 'Découpe chaque demande en tâches, les assigne aux spécialistes et assemble les résultats.', model: 'claude-sonnet-5-5', capabilities: ['readRequest'] },
+  { role: 'architect', label: 'Architecte', mission: 'Conçoit la configuration de l’agent : rôle, actions, skills, outils et permissions proposées.', model: 'claude-opus-5-5', capabilities: ['readCatalog', 'readProject'] },
+  { role: 'security', label: 'Contrôleur sécurité', mission: 'Examine chaque plan et chaque action avant exécution ; peut refuser ou exiger une validation humaine.', model: 'claude-opus-5-5', capabilities: ['readCatalog'] },
+  { role: 'builder', label: 'Constructeur', mission: 'Génère l’agent à partir du plan validé et l’enregistre en base.', model: 'claude-sonnet-5-5', capabilities: ['readCatalog', 'createAgentFromPlan'] },
+  { role: 'tester', label: 'Testeur', mission: 'Lance l’environnement de test, vérifie connexion et configuration, produit un rapport.', model: 'claude-haiku-5-5', capabilities: ['runChecks', 'runSandbox'] },
+  { role: 'supervisor', label: 'Superviseur', mission: 'Surveille en continu les agents actifs (logs, erreurs, coûts), détecte les anomalies et propose des corrections.', model: 'claude-haiku-5-5', capabilities: ['readAgentHealth', 'readRecentErrors', 'notify'] },
+]
+const team = { requests: [] as TeamRequest[], tasks: [] as TeamTask[], events: [] as TeamEvent[] }
+let evtSeq = 1
+
+function teamEvent(requestId: ID, fromRole: string, type: string, toRole: string | null = null, taskId: ID | null = null) {
+  team.events.push({ id: evtSeq++, requestId, taskId, at: nowIso(), fromRole, toRole, type, payload: null })
+}
+
+const TEAM_OUTPUT: Record<TeamRole, Record<string, unknown>> = {
+  orchestrator: {},
+  architect: { name: 'Gardien Bonaco Pro', type: 'monitoring', allowedActions: ['Lire les journaux applicatifs', 'Créer un ticket'] },
+  security: { verdict: 'approve', reasons: ['Moindre privilège respecté'], findings: [] },
+  builder: { agentId: 'agt_8f3k2', persona: 'Factuel, bref, cite la source.' },
+  tester: { passed: true, scenario: 'Erreur 500 sur /api/invoices' },
+  supervisor: { watching: 1, anomalies: [] },
+}
+
+function simulateTeam(req: TeamRequest, instant = false) {
+  const flow: TeamRole[] = ['architect', 'security', 'builder', 'tester', 'supervisor']
+  const steps: (() => void)[] = []
+  let parent: ID | null = null
+  for (const role of flow) {
+    steps.push(() => {
+      const orch: TeamTask = { id: uid('tsk'), requestId: req.id, parentId: parent, role: 'orchestrator', status: 'done', input: { allowedNext: [role] }, output: { next: role }, tokens: 180, cost: 0.0009, durationMs: 400, model: 'claude-sonnet-5-5', error: null, createdAt: nowIso(), startedAt: nowIso(), finishedAt: nowIso() }
+      const task: TeamTask = { id: uid('tsk'), requestId: req.id, parentId: orch.id, role, status: 'running', input: {}, output: null, tokens: 0, cost: 0, durationMs: 0, model: TEAM_ROLES.find((r) => r.role === role)!.model, error: null, createdAt: nowIso(), startedAt: nowIso(), finishedAt: null }
+      team.tasks.push(orch, task)
+      teamEvent(req.id, 'orchestrator', 'task.dispatched', role, task.id)
+      teamEvent(req.id, role, 'task.started', null, task.id)
+      req.steps += 2
+      req.agentCalls += 1
+      parent = task.id
+    })
+    steps.push(() => {
+      const task = team.tasks.filter((t) => t.requestId === req.id && t.role === role).at(-1)!
+      Object.assign(task, { status: 'done', output: TEAM_OUTPUT[role], tokens: 900 + Math.round(Math.random() * 900), cost: 0.006, durationMs: 1200 + Math.round(Math.random() * 1500), finishedAt: nowIso() })
+      req.tokens += task.tokens + 180
+      req.cost += task.cost
+      teamEvent(req.id, role, 'task.completed', 'orchestrator', task.id)
+    })
+  }
+  steps.push(() => {
+    Object.assign(req, { status: 'done', result: { agentId: 'agt_8f3k2', testsPassed: true }, finishedAt: nowIso() })
+    teamEvent(req.id, 'orchestrator', 'request.done')
+  })
+  if (instant) steps.forEach((f) => f())
+  else steps.forEach((f, i) => setTimeout(f, 700 * (i + 1)))
+}
+
+function newTeamRequest(input: Record<string, unknown>, instant = false) {
+  const req: TeamRequest = { id: uid('req'), kind: 'create_agent', input, status: 'running', result: null, error: null, steps: 0, agentCalls: 0, tokens: 0, cost: 0, createdBy: 'usr_1', createdAt: nowIso(), finishedAt: null }
+  team.requests.unshift(req)
+  teamEvent(req.id, 'user', 'request.created', 'orchestrator')
+  simulateTeam(req, instant)
+  return req
+}
+newTeamRequest({ brief: 'Surveille les erreurs et la latence de Bonaco Pro et alerte l’équipe.', projectId: 'prj_bonaco', maxActions: ['Lire les journaux applicatifs', 'Créer un ticket', 'Envoyer une alerte'], autonomyCeiling: 'act_after_approval' }, true)
+
 export const mockApi: ForgeApi = {
+  auth: {
+    me: () => delay(DEMO_USER, 60),
+    login: () => delay(DEMO_USER),
+    signup: () => delay(DEMO_USER),
+    acceptInvite: () => delay(DEMO_USER),
+    resetRequest: () => delay(undefined),
+    logout: () => delay(undefined, 60),
+  },
+  internalTeam: {
+    agents: () =>
+      delay(
+        TEAM_ROLES.map((r) => {
+          const ts = team.tasks.filter((t) => t.role === r.role)
+          return {
+            ...r,
+            status: ts.some((t) => t.status === 'running') ? ('working' as const) : ('idle' as const),
+            running: ts.filter((t) => t.status === 'running').length,
+            queued: 0,
+            tasksDone: ts.filter((t) => t.status === 'done').length,
+            tasksFailed: 0,
+            tokens: ts.reduce((n, t) => n + t.tokens, 0),
+            cost: ts.reduce((n, t) => n + t.cost, 0),
+            lastActivityAt: ts.at(-1)?.finishedAt ?? ts.at(-1)?.createdAt ?? null,
+          }
+        }),
+        120,
+      ),
+    requests: () => delay(team.requests, 120),
+    request: (id) => {
+      const request = team.requests.find((r) => r.id === id)
+      if (!request) throw new ApiError('Demande introuvable', 404)
+      return delay({ request, tasks: team.tasks.filter((t) => t.requestId === id), events: team.events.filter((e) => e.requestId === id) }, 100)
+    },
+    create: (input) => delay(newTeamRequest(input as unknown as Record<string, unknown>)),
+    sweep: () => delay({ requestId: null }),
+    queue: () => delay({ 'team.orchestrator': { waiting: 0, active: 0 } }, 60),
+  },
   overview: {
     get: () => {
       const active = db.agents.filter((a) => a.status === 'active')
@@ -304,9 +408,9 @@ export const mockApi: ForgeApi = {
 
   apiKeys: {
     list: () => delay(db.apiKeys),
-    create: (name, environment) => {
-      const s = secret(environment)
-      const key = { id: uid('key'), name, prefix: s.slice(0, 12), environment, createdAt: nowIso(), lastUsedAt: null }
+    create: (name, environment, opts) => {
+      const s = opts?.scope === 'publishable' ? secret(environment).replace(/^fa_(live|test)_/, 'fa_pub_') : secret(environment)
+      const key = { id: uid('key'), name, prefix: s.slice(0, 12), environment, scope: opts?.scope ?? ('secret' as const), projectId: opts?.projectId ?? null, createdAt: nowIso(), lastUsedAt: null }
       db.apiKeys.push(key)
       log(ME, 'a créé une clé API', name)
       return delay({ key, secret: s })
