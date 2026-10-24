@@ -68,7 +68,10 @@ export function agentSpaceRoutes(app: Hono<AppEnv>) {
   /* ---------- Intégration: secrets, sites, webhooks ---------- */
   route(app, { method: 'get', path: `${P}/secrets`, tag: 'Intégration', summary: 'Secrets de l’agent (noms seulement)', agent: 'viewer' }, ({ agent }) => agent.tx((tx) => listSecrets(tx, agent.id)))
   route(app, { method: 'put', path: `${P}/secrets`, tag: 'Intégration', summary: 'Créer ou remplacer un secret (chiffré avec la clé de cet agent)', agent: 'owner', body: SecretInput }, ({ agent, body }) =>
-    agent.tx((tx) => putSecret(tx, agent.id, body.name, body.value, agent.actor.name)),
+    agent.tx(async (tx) => {
+      await putSecret(tx, agent.id, body.name, body.value, agent.actor.name)
+      return (await listSecrets(tx, agent.id)).find((x) => x.name === body.name)!
+    }),
   )
   route(app, { method: 'delete', path: `${P}/secrets/:name`, tag: 'Intégration', summary: 'Supprimer un secret', agent: 'owner', status: 204 }, async ({ agent, params }) => {
     await agent.tx((tx) => deleteSecret(tx, agent.id, params.name, agent.actor.name))

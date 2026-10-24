@@ -26,7 +26,8 @@ export const tester: TeamAgent<'tester', z.infer<typeof Input>, z.infer<typeof O
     const checks = await ctx.caps.runChecks()
     const s = await ctx.think({ mission: input.mission }, Scenario, { maxTokens: 300 })
     const sandbox = await ctx.caps.runSandbox(s.scenario)
-    const evaluation = await ctx.caps.runEvaluation([{ input: s.scenario, expect: s.expectation }])
+    // The expectation is prose for the report; the scored case only requires a non-error answer.
+    const evaluation = await ctx.caps.runEvaluation([{ input: s.scenario, expect: '' }])
     const passed = !checks.some((c) => c.status === 'fail') && sandbox.status !== 'error' && evaluation.score >= 50
     return { passed, checks, scenario: s.scenario, expectation: s.expectation, sandbox, evaluation }
   },

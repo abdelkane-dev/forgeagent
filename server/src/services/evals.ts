@@ -16,7 +16,7 @@ import { generateDoc } from './docs'
 export async function listSuites(tx: Tx, agentId: string): Promise<EvalSuite[]> {
   const suites = await tx.select().from(s.evalSuites).where(eq(s.evalSuites.agentId, agentId)).orderBy(asc(s.evalSuites.createdAt))
   const counts = await tx.select({ suiteId: s.evalCases.suiteId, n: sql<number>`count(*)::int` }).from(s.evalCases).where(eq(s.evalCases.agentId, agentId)).groupBy(s.evalCases.suiteId)
-  const last = await tx.execute(sql`select distinct on (suite_id) suite_id, score, at from eval_runs where agent_id = ${agentId} order by suite_id, at desc`)
+  const last = await tx.execute(sql`select distinct on (${s.evalRuns.suiteId}) ${s.evalRuns.suiteId} as suite_id, ${s.evalRuns.score} as score, ${s.evalRuns.at} as at from ${s.evalRuns} where ${s.evalRuns.agentId} = ${agentId} order by ${s.evalRuns.suiteId}, ${s.evalRuns.at} desc`)
   const lastRows = (last as unknown as { rows: { suite_id: string; score: number; at: string }[] }).rows ?? (last as unknown as { suite_id: string; score: number; at: string }[])
   return suites.map((x) => {
     const l = lastRows.find((r) => r.suite_id === x.id)

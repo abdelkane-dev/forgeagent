@@ -34,9 +34,10 @@ export interface Capabilities {
 }
 
 export function capabilitiesFor<R extends TeamRole>(role: R, agentId: string, requestId: string, token: string) {
-  const guard = () => verifyCapability(token, { agentId })
-  const as = <T,>(fn: Parameters<typeof asAgent<T>>[1]) => {
-    guard()
+  // Always async: a refused token rejects the call instead of throwing at the call site.
+  const guard = async () => void verifyCapability(token, { agentId })
+  const as = async <T,>(fn: Parameters<typeof asAgent<T>>[1]) => {
+    await guard()
     return asAgent(agentId, fn)
   }
   const all: Capabilities = {
@@ -93,17 +94,17 @@ export function capabilitiesFor<R extends TeamRole>(role: R, agentId: string, re
         )
         return { agentId }
       }),
-    runChecks: () => {
-      guard()
+    runChecks: async () => {
+      await guard()
       return runChecks(agentId)
     },
     runSandbox: async (input) => {
-      guard()
+      await guard()
       const r = await runAgent(agentId, input, { source: 'team', sandbox: true })
       return { status: r.status, content: r.message.content, tokens: r.message.meta?.tokens ?? 0 }
     },
     runEvaluation: async (cases) => {
-      guard()
+      await guard()
       const suiteId = await asAgent(agentId, (tx) => createSuite(tx, agentId, { name: 'Recette initiale', regression: true, cases }, 'tester'))
       const run = await runSuite(agentId, suiteId, 'team', { actor: 'tester' })
       await asAgent(agentId, (tx) => setSystemStatus(tx, agentId, run.score >= 50 ? 'validated' : 'error', `évaluation initiale : ${run.score} %`))
