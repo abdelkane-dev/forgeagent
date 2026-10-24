@@ -34,3 +34,5 @@ dist-ssr
 .env.local
 server-dev.log
 .playwright-cli
+e2e-artifacts
+compose-build.log

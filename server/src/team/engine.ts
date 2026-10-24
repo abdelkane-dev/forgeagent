@@ -178,7 +178,8 @@ async function dispatch(requestId: string, role: TeamRole, input: Record<string,
     .update(s.teamRequests)
     .set({ steps: sql`${s.teamRequests.steps} + 1`, agentCalls: role === 'orchestrator' ? sql`${s.teamRequests.agentCalls}` : sql`${s.teamRequests.agentCalls} + 1` })
     .where(eq(s.teamRequests.id, requestId))
-  await event(requestId, 'orchestrator', 'task.dispatched', { taskId: id, toRole: role, payload: { inputHash } })
+  // The orchestrator's own decision steps are logged as orchestrator.decided (see orchestrate), not as dispatches.
+  if (role !== 'orchestrator') await event(requestId, 'orchestrator', 'task.dispatched', { taskId: id, toRole: role, payload: { inputHash } })
   if (role !== 'orchestrator') await queue.add(Q(role), 'run', { taskId: id })
   return id
 }
@@ -206,7 +207,7 @@ async function execute(taskId: string) {
   let tokens = 0
   let cost = 0
   await db.update(s.teamTasks).set({ status: 'running', startedAt: new Date().toISOString() }).where(eq(s.teamTasks.id, taskId))
-  await event(task.requestId, role, 'task.started', { taskId })
+  if (role !== 'orchestrator') await event(task.requestId, role, 'task.started', { taskId })
 
   const ctx: TeamContext = {
     requestId: task.requestId,
@@ -248,7 +249,7 @@ async function execute(taskId: string) {
       .set({ status: role === 'security' && output.verdict === 'veto' ? 'vetoed' : 'done', output, tokens, cost, durationMs: Date.now() - t0, finishedAt: new Date().toISOString() })
       .where(eq(s.teamTasks.id, taskId))
     await db.update(s.teamRequests).set({ tokens: sql`${s.teamRequests.tokens} + ${tokens}`, cost: sql`${s.teamRequests.cost} + ${cost}` }).where(eq(s.teamRequests.id, task.requestId))
-    await event(task.requestId, role, 'task.completed', { taskId, toRole: 'orchestrator', payload: { tokens, durationMs: Date.now() - t0 } })
+    if (role !== 'orchestrator') await event(task.requestId, role, 'task.completed', { taskId, toRole: 'orchestrator', payload: { tokens, durationMs: Date.now() - t0 } })
     await audit(agent.label, 'team', 'a terminé une tâche', task.requestId, { taskId, tokens })
     return output
   } catch (e) {
@@ -315,6 +316,7 @@ async function orchestrate(requestId: string, reason: string) {
     const orchTaskId = await dispatch(requestId, 'orchestrator', orchInput, last?.id ?? null)
     const decision = (await execute(orchTaskId)) as { next: string; instructions: string } | null
     if (!decision) return finish(requestId, 'failed', { error: 'Orchestrateur indisponible' })
+    await event(requestId, 'orchestrator', 'orchestrator.decided', { taskId: orchTaskId, payload: { next: decision.next, instructions: decision.instructions } })
     let next = decision.next as TeamRole
     if (!allowed.includes(next)) {
       await event(requestId, 'orchestrator', 'orchestrator.corrected', { payload: { proposed: decision.next, enforced: allowed[0] } })

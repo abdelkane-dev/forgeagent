@@ -40,6 +40,7 @@ const STATUS: Record<TeamRequestStatus, { label: string; tone: 'ok' | 'warn' | '
 const EVENT_LABEL: Record<string, string> = {
   'request.created': 'demande créée',
   'task.dispatched': 'tâche assignée',
+  'orchestrator.decided': 'décide de l’étape suivante',
   'task.started': 'tâche démarrée',
   'task.completed': 'tâche terminée',
   'task.failed': 'tâche en échec',
@@ -327,7 +328,8 @@ export default function InternalTeam() {
             <Panel className="p-5 pt-10">
               <Async query={agents}>
                 {(list) => {
-                  const data = list.map((a) => ({ label: a.label.split(' ')[0].slice(0, 9), value: a.tokens }))
+                  const SHORT: Record<string, string> = { orchestrator: 'Orch.', architect: 'Archi.', security: 'Sécu.', builder: 'Constr.', tester: 'Test.', supervisor: 'Superv.' }
+                  const data = list.map((a) => ({ label: SHORT[a.role] ?? a.label, value: a.tokens }))
                   const max = data.reduce((m, d, i) => (d.value > data[m].value ? i : m), 0)
                   return <ColumnChart label="Tokens consommés par rôle" data={data} highlight={max} height={180} />
                 }}

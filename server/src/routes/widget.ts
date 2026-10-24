@@ -40,7 +40,12 @@ async function authorize(c: Context<AppEnv>, key: string | undefined, agentId: s
   const [link] = await db.select().from(s.agentProjects).where(and(eq(s.agentProjects.agentId, agentId), eq(s.agentProjects.projectId, k.projectId)))
   if (!link) throw forbidden('Cet agent n’appartient pas au projet de la clé')
   const [project] = await db.select().from(s.projects).where(eq(s.projects.id, k.projectId))
-  const origin = c.req.header('origin')
+  // Same-origin GETs (EventSource on a page served by the API itself) carry no Origin header:
+  // Sec-Fetch-Site cannot be set by page scripts, so it safely identifies the API's own origin.
+  const referer = c.req.header('referer')
+  const origin =
+    c.req.header('origin') ??
+    (c.req.header('sec-fetch-site') === 'same-origin' ? new URL(config.PUBLIC_URL).origin : referer ? new URL(referer).origin : undefined)
   if (!origin || !originAllowed(origin, project.allowedDomains)) throw forbidden(`Origine non autorisée pour ce projet : ajoutez le domaine dans Projets › Domaines autorisés`)
   void db.update(s.apiKeys).set({ lastUsedAt: new Date().toISOString() }).where(eq(s.apiKeys.id, k.id)).catch(() => null)
   return { origin, keyId: k.id }
