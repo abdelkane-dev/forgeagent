@@ -8,3 +8,8 @@ process.env.KEY_PEPPER = 'test-pepper-0123456789abcdef0123456789'
 process.env.ENCRYPTION_KEY = '0'.repeat(64)
 process.env.ALLOW_PRIVATE_SITE_URLS = 'true'
 delete process.env.ANTHROPIC_API_KEY
+// OAuth providers enabled with fake credentials; their HTTP calls are stubbed in test/oauth.test.ts.
+process.env.GITHUB_CLIENT_ID = 'gh-test-client'
+process.env.GITHUB_CLIENT_SECRET = 'gh-test-secret'
+process.env.GOOGLE_CLIENT_ID = 'google-test-client.apps.googleusercontent.com'
+process.env.GOOGLE_CLIENT_SECRET = 'google-test-secret'

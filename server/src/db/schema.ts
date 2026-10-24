@@ -58,6 +58,16 @@ export const users = pgTable('users', {
   lastActiveAt: ts('last_active_at').notNull().defaultNow(),
 }, (t) => [uniqueIndex('users_email_uq').on(sql`lower(${t.email})`)])
 
+/** External sign-in (GitHub, Google) linked to an account. subject = the provider's stable user id. */
+export const userIdentities = pgTable('user_identities', {
+  provider: text('provider').$type<'github' | 'google'>().notNull(),
+  subject: text('subject').notNull(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  createdAt: createdAt(),
+  lastLoginAt: ts('last_login_at'),
+}, (t) => [primaryKey({ columns: [t.provider, t.subject] }), index('user_identities_user_idx').on(t.userId)])
+
 /** Session id = SHA-256 of the cookie token. */
 export const sessions = pgTable('sessions', {
   id: text('id').primaryKey(),

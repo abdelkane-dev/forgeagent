@@ -17,7 +17,7 @@ export interface PublicUser {
   platformRole: PlatformRole
 }
 
-const toPublic = (u: typeof s.users.$inferSelect): PublicUser => ({ id: u.id, name: u.name, email: u.email, platformRole: u.platformRole })
+export const toPublic = (u: typeof s.users.$inferSelect): PublicUser => ({ id: u.id, name: u.name, email: u.email, platformRole: u.platformRole })
 
 /** Same work whether the email exists or not, to avoid user enumeration by timing. */
 const DUMMY_HASH = hashPassword(randomToken())
@@ -77,15 +77,28 @@ export async function resolvePrincipal(cookieToken: string | undefined, authHead
   return { kind: 'user', id: row.user.id, name: row.user.name, email: row.user.email, platformRole: row.user.platformRole, sessionId: id }
 }
 
-/** First-run bootstrap: signup is open only while the instance has no user. The first account is platform admin. */
-export async function signup(name: string, email: string, password: string, userAgent?: string) {
+/** Who may create an account right now: the first account always, then according to SIGNUP_MODE. */
+export async function signupState(): Promise<'first' | 'open' | 'invite'> {
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(s.users)
-  if (n > 0) throw forbidden('Inscription fermée : demandez une invitation à un administrateur')
+  return n === 0 ? 'first' : config.SIGNUP_MODE
+}
+
+/** Creates an account: the first one is platform admin, the next ones are members (they only see their own agents). */
+export async function createAccount(name: string, email: string, passwordHash: string, via: string) {
+  const state = await signupState()
+  if (state === 'invite') throw forbidden('Inscription fermée : demandez une invitation à un administrateur')
+  const exists = await db.select({ id: s.users.id }).from(s.users).where(sql`lower(${s.users.email}) = ${email.toLowerCase()}`)
+  if (exists.length) throw conflict('Un compte utilise déjà cet email : connectez-vous')
+  const platformRole: PlatformRole = state === 'first' ? 'admin' : 'member'
   const id = newId('usr')
-  await db.insert(s.users).values({ id, name, email, platformRole: 'admin', passwordHash: await hashPassword(password) })
-  await platformAudit(name, 'a créé le compte administrateur', 'instance')
-  const token = await createSession(id, userAgent)
-  return { user: { id, name, email, platformRole: 'admin' as PlatformRole }, token }
+  await db.insert(s.users).values({ id, name, email, platformRole, passwordHash })
+  await platformAudit(name, state === 'first' ? 'a créé le compte administrateur' : 'a créé son compte', `${email} (${via})`)
+  return { id, name, email, platformRole }
+}
+
+export async function signup(name: string, email: string, password: string, userAgent?: string) {
+  const user = await createAccount(name, email, await hashPassword(password), 'email')
+  return { user, token: await createSession(user.id, userAgent) }
 }
 
 /** Invitation: creates the user with an unusable password and returns a one-time link to set it. */

@@ -15,6 +15,14 @@ export type PlatformRole = 'admin' | 'member'
 /** Role on ONE agent. Being a member of agent A gives nothing on agent B. */
 export type AgentRole = 'owner' | 'editor' | 'viewer'
 
+/** Sign-in methods enabled on the instance. signup: first = no account yet (the first becomes admin). */
+export interface AuthProviders {
+  password: boolean
+  github: boolean
+  google: boolean
+  signup: 'first' | 'open' | 'invite'
+}
+
 export interface User {
   id: ID
   name: string

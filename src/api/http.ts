@@ -55,6 +55,8 @@ export const httpApi: ForgeApi = {
     acceptInvite: (email, token, password) => post('/auth/accept-invite', { email, token, password }),
     resetRequest: (email) => post('/auth/reset-request', { email }),
     logout: () => post('/auth/logout'),
+    providers: () => get('/auth/providers'),
+    oauthUrl: (provider, next) => `${BASE}/v1/auth/oauth/${provider}/start${qs({ next })}`,
   },
   overview: { get: () => get('/overview') },
   approvals: {

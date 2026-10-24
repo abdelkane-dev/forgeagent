@@ -9,6 +9,7 @@ import type {
   AgentRole,
   AgentSecret,
   AgentStatus,
+  AuthProviders,
   ApiKey,
   Approval,
   AuditEntry,
@@ -60,6 +61,9 @@ export interface ForgeApi {
     acceptInvite(email: string, token: string, password: string): Promise<User>
     resetRequest(email: string): Promise<void>
     logout(): Promise<void>
+    providers(): Promise<AuthProviders>
+    /** Address that starts a GitHub or Google sign-in (full-page navigation). */
+    oauthUrl(provider: 'github' | 'google', next?: string): string
   }
   /** Dashboard of MY agents only. */
   overview: { get(): Promise<Overview> }

@@ -79,6 +79,18 @@ const Env = z.object({
   /** Allow site checks to reach private addresses (localhost demo sites). Keep false in production. */
   ALLOW_PRIVATE_SITE_URLS: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+
+  /**
+   * Who may create an account: open = anyone (email + password, GitHub or Google), invite = only
+   * invited people (and the very first account). The first account is always platform admin.
+   */
+  SIGNUP_MODE: z.enum(['open', 'invite']).default('open'),
+  /** GitHub OAuth app (callback: <PUBLIC_URL>/v1/auth/oauth/github/callback). Both set ⇒ enabled. */
+  GITHUB_CLIENT_ID: z.string().optional(),
+  GITHUB_CLIENT_SECRET: z.string().optional(),
+  /** Google OAuth client, for Gmail and Google Workspace accounts (callback: <PUBLIC_URL>/v1/auth/oauth/google/callback). */
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
 })
 
 // Empty values (`ANTHROPIC_API_KEY=`) mean "not set", so defaults apply.
@@ -94,5 +106,9 @@ export const config = {
   consoleOrigins: e.CONSOLE_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
   llmProvider: e.LLM_PROVIDER ?? (e.ANTHROPIC_API_KEY ? 'anthropic' : 'simulated'),
   isProd: e.NODE_ENV === 'production',
+  oauth: {
+    github: e.GITHUB_CLIENT_ID && e.GITHUB_CLIENT_SECRET ? { clientId: e.GITHUB_CLIENT_ID, clientSecret: e.GITHUB_CLIENT_SECRET } : null,
+    google: e.GOOGLE_CLIENT_ID && e.GOOGLE_CLIENT_SECRET ? { clientId: e.GOOGLE_CLIENT_ID, clientSecret: e.GOOGLE_CLIENT_SECRET } : null,
+  },
 }
 export type Config = typeof config

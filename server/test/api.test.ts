@@ -1,10 +1,11 @@
 import { and, eq } from 'drizzle-orm'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { config } from '../src/config'
 import { asAgent, db, schema as s } from '../src/db/client'
 import { resetRateLimits } from '../src/lib/rate-limit'
 import { startBackgroundJobs } from '../src/runtime/jobs'
 import { setupDb } from './helpers'
-import { app, bearer, call, login, newKey } from './http'
+import { app, bearer, call, login, newKey, ORIGIN } from './http'
 
 let admin = ''
 let editor = ''
@@ -57,9 +58,25 @@ describe('authentification', () => {
     expect((await call(admin, 'POST', '/v1/projects', { name: 'Projet CSRF' }, { origin: 'https://evil.example' })).status).toBe(403)
   })
 
-  it('ne permet pas de s’inscrire quand la plateforme a déjà des comptes', async () => {
-    const r = await app.request('/v1/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Intrus', email: 'i@x.io', password: 'mot-de-passe-long' }) })
-    expect(r.status).toBe(403)
+  it('inscription ouverte : le nouveau compte est simple membre et ne voit aucun agent', async () => {
+    const r = await app.request('/v1/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json', origin: ORIGIN }, body: JSON.stringify({ name: 'Nouvelle', email: 'nouvelle@x.io', password: 'mot-de-passe-long' }) })
+    expect(r.status).toBe(201)
+    expect((await r.json()).platformRole).toBe('member')
+    const cookie = r.headers.get('set-cookie')!.split(';')[0]
+    expect(await (await call(cookie, 'GET', '/v1/agents')).json()).toEqual([])
+    const dup = await app.request('/v1/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Bis', email: 'NOUVELLE@x.io', password: 'mot-de-passe-long' }) })
+    expect(dup.status).toBe(409)
+  })
+
+  it('inscription sur invitation seulement quand SIGNUP_MODE=invite', async () => {
+    config.SIGNUP_MODE = 'invite'
+    try {
+      const r = await app.request('/v1/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Intrus', email: 'i@x.io', password: 'mot-de-passe-long' }) })
+      expect(r.status).toBe(403)
+      expect((await (await app.request('/v1/auth/providers')).json()).signup).toBe('invite')
+    } finally {
+      config.SIGNUP_MODE = 'open'
+    }
   })
 })
 

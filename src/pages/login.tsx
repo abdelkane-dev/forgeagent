@@ -1,5 +1,5 @@
-import { ArrowLeft, Eye, EyeOff, GitBranch } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { api, isDemo } from '@/api'
 import { Link, useNavigate, useSearchParams } from 'react-router'
@@ -13,6 +13,26 @@ import { Input } from '@/components/ui/input'
 
 type Mode = 'login' | 'signup' | 'reset'
 
+/** Official marks, as their sign-in guidelines ask. */
+function GitHubMark() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" aria-hidden fill="currentColor">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+    </svg>
+  )
+}
+
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 48 48" className="size-4" aria-hidden>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5Z" />
+      <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7Z" />
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44Z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5Z" />
+    </svg>
+  )
+}
+
 /**
  * Sign-in screen of a self-hosted instance. Front-end only: the real session
  * is created by the back-end (POST /v1/auth/login) once VITE_API_URL is set.
@@ -25,7 +45,13 @@ export default function Login() {
   const [email, setEmail] = useState(() => params.get('email') ?? '')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState(() => {
+    const e = params.get('error')
+    const initial: Record<string, string> = e ? { form: e } : {}
+    return initial
+  })
+  const providers = useQuery({ queryKey: ['auth', 'providers'], queryFn: api.auth.providers, staleTime: 60_000 })
+  const signup = providers.data?.signup ?? 'open'
   const [pending, setPending] = useState(false)
   const [sent, setSent] = useState(false)
   const qc = useQueryClient()
@@ -75,7 +101,7 @@ export default function Login() {
         </div>
         <main className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center py-12">
           <h1 className="text-[32px] leading-tight font-extrabold tracking-[-0.04em]">
-            {mode === 'signup' ? 'Créer le compte administrateur' : mode === 'reset' ? 'Réinitialiser le mot de passe' : 'Connexion à votre instance'}
+            {mode === 'signup' ? (signup === 'first' ? 'Créer le compte administrateur' : 'Créer votre compte') : mode === 'reset' ? 'Réinitialiser le mot de passe' : 'Connexion à votre instance'}
           </h1>
           <p className="mt-2 text-[15px] text-muted-foreground">
             {mode === 'reset' ? 'Nous vous enverrons un lien valable 30 minutes.' : 'Instance auto-hébergée : vos identifiants ne quittent jamais votre serveur.'}
@@ -91,7 +117,7 @@ export default function Login() {
               }}
               items={[
                 { value: 'login', label: 'Connexion' },
-                { value: 'signup', label: 'Inscription' },
+                ...(signup !== 'invite' ? [{ value: 'signup' as const, label: 'Inscription' }] : []),
               ]}
             />
           )}
@@ -141,10 +167,34 @@ export default function Login() {
                   Revenir à la connexion
                 </button>
               )}
-              {mode !== 'reset' && (
-                <Button type="button" variant="outline" size="lg" onClick={() => toast('Configurez l’OAuth GitHub sur votre back-end (variables GITHUB_CLIENT_ID et GITHUB_CLIENT_SECRET).')}>
-                  <GitBranch /> Continuer avec GitHub
-                </Button>
+              {mode !== 'reset' && !invite && (
+                <div className="grid gap-2">
+                  <div className="my-1 flex items-center gap-3 text-[13px] text-muted-foreground" aria-hidden>
+                    <span className="h-px flex-1 bg-border" /> ou <span className="h-px flex-1 bg-border" />
+                  </div>
+                  {(['github', 'google'] as const).map((p) => {
+                    const on = !!providers.data?.[p]
+                    const label = p === 'github' ? 'Continuer avec GitHub' : 'Continuer avec Google'
+                    return (
+                      <Button
+                        key={p}
+                        type="button"
+                        variant="outline"
+                        size="lg"
+                        aria-disabled={!on}
+                        className={on ? undefined : 'opacity-60'}
+                        onClick={() =>
+                          on
+                            ? location.assign(api.auth.oauthUrl(p, next && next.startsWith('/app') ? next : undefined))
+                            : toast(`${label} : configurez ${p === 'github' ? 'GITHUB_CLIENT_ID et GITHUB_CLIENT_SECRET' : 'GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET'} sur le back-end.`)
+                        }
+                      >
+                        {p === 'github' ? <GitHubMark /> : <GoogleMark />} {label}
+                      </Button>
+                    )
+                  })}
+                  {mode === 'signup' && <p className="text-[13px] text-muted-foreground">Avec GitHub ou un compte Gmail, le compte est créé à la première connexion. Seules les adresses vérifiées par le fournisseur sont acceptées.</p>}
+                </div>
               )}
             </form>
           )}
@@ -154,7 +204,10 @@ export default function Login() {
                 Mode démo : <Link to="/app" className="font-semibold text-foreground underline underline-offset-4">ouvrez la console</Link> sans compte.
               </>
             ) : (
-              <>Comptes de démonstration : abdoul@bonaco.pro (admin), ines@bonaco.pro (éditeur), theo@bonaco.pro (lecteur).</>
+              <>
+                {signup === 'invite' ? 'Inscription sur invitation : demandez un lien à un administrateur. ' : ''}
+                Comptes de démonstration : abdoul@bonaco.pro (administrateur), ines@bonaco.pro et theo@bonaco.pro (membres).
+              </>
             )}
           </p>
         </main>

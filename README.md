@@ -34,6 +34,20 @@ Comptes de démonstration (mot de passe : `SEED_PASSWORD` dans `.env`, `forgeage
 
 Les clés API de démonstration (une série par agent) s’affichent une seule fois dans les journaux de l’API au premier démarrage. La documentation de l’API est disponible sur <http://localhost:8787/docs> (Swagger UI) et sur `/v1/openapi.json`.
 
+### Inscription et connexion
+
+- **Email et mot de passe.** Le premier compte devient administrateur de la plateforme. Ensuite, `SIGNUP_MODE=open` (par défaut) laisse chacun créer un compte de simple membre, qui ne voit que les agents qu’il crée ou auxquels on l’ajoute. `SIGNUP_MODE=invite` réserve l’inscription aux invitations.
+- **GitHub.** Créez une OAuth App (GitHub › Settings › Developer settings › OAuth Apps). Déclarez comme *Authorization callback URL* `<PUBLIC_URL>/v1/auth/oauth/github/callback`, par exemple `http://localhost:8787/v1/auth/oauth/github/callback`. Renseignez ensuite `GITHUB_CLIENT_ID` et `GITHUB_CLIENT_SECRET`.
+- **Google, pour les comptes Gmail et Workspace.** Créez un « ID client OAuth » de type *Application Web* dans la Google Cloud Console. Déclarez comme URI de redirection `<PUBLIC_URL>/v1/auth/oauth/google/callback`, puis renseignez `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET`.
+- Redémarrez l’API (`docker compose up -d`) : les boutons « Continuer avec GitHub / Google » deviennent actifs.
+- Règles appliquées :
+  - un état signé et à usage unique protège le retour du fournisseur contre le CSRF ;
+  - Google utilise PKCE ;
+  - seules les adresses **vérifiées** par le fournisseur sont acceptées ;
+  - une adresse vérifiée égale à celle d’un compte existant (ou d’une invitation) rejoint ce compte ;
+  - sinon, un compte est créé si l’inscription est ouverte ;
+  - le retour ne redirige que vers la console.
+
 ### Autres modes
 
 | Commande | Usage |
@@ -59,6 +73,9 @@ Toutes sont décrites dans [`.env.example`](.env.example). Voici les principales
 | `QUEUE_DRIVER` / `REDIS_URL` | `bullmq` (Redis) ou `memory` |
 | `ANTHROPIC_API_KEY` | Clé Claude (sinon modèle simulé) |
 | `MODEL_*` | Modèle par rôle interne (voir La Forge), et `MODEL_SUPERVISOR_ESCALATION` |
+| `SIGNUP_MODE` | `open` (inscription libre) ou `invite` |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Connexion avec GitHub |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Connexion avec Google (Gmail) |
 | `KEY_PEPPER`, `ENCRYPTION_KEY` | Hachage des clés, chiffrement (avec une clé dérivée par agent), jetons de capacité |
 | `CAPABILITY_TTL_SEC`, `REGRESSION_TOLERANCE` | Durée d’un jeton de tâche, baisse de score tolérée avant publication |
 | `TEAM_MAX_*`, `RUN_MAX_STEPS`, `RUN_TIMEOUT_MS` | Garde-fous |
