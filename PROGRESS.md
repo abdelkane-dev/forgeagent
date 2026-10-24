@@ -66,8 +66,17 @@ Légende : [x] fini · [~] en cours · [ ] à faire
 - Inspecteur taste-skill (landing, 1440/768/390) : 0 FAIL, 5 WARN défendus : pas de photo ni de vidéo (le sujet est un logiciel : les fragments d’interface tiennent lieu d’images), tailles de police issues des fragments d’UI, légendes secondaires en gris, marge droite, respiration sous le hero.
 - Responsive contrôlé à 390 / 768 / 1440, thème clair et sombre.
 
+## Phase 5 — Thème forge et front v2 (isolation par agent)
+- [x] `FORGE_THEME.md` source unique ; libellés centralisés dans `src/labels.ts` (Tableau de bord, Agents, Skills, Test, Intégration, Logs, Projets, Paramètres, « Forger un agent », La Forge)
+- [x] Palette charbon et braise (sombre par défaut), lueur en fusion sur les actions clés, logo enclume et marteau, favicon
+- [x] États Inactif, Démarrage, Actif, Validé, Erreur : rendu métal (gris froid, braise, orange en fusion, bleu de trempe, rouge fissuré), libellé toujours visible
+- [x] Équipe : 6 blasons SVG, devises, couleurs d’accent, rôle technique toujours affiché
+- [x] Landing : chaleur (feTurbulence) et étincelles (Motion), coupées si `prefers-reduced-motion`
+- [x] Espace agent à 10 onglets, La Forge, Test / Intégration / Logs par agent, Paramètres (compte, plateforme, administration)
+- [x] Anciennes pages globales contraires à l’isolation retirées (workflows, connaissances, évaluations, observabilité, sécurité, audit, usage, équipe, équipe interne) ; anciennes adresses redirigées
+- [x] Build, lint et parcours Playwright v2 verts (voir BACKEND_PROGRESS.md)
+
 ## Pistes après livraison
-- Brancher le back-end ressource par ressource (voir README).
 - Remplacer les liens GitHub `forgeagent/forgeagent` par l’URL réelle du dépôt.
 - Ajouter des tests unitaires (Vitest) sur `src/api/mock` et les hooks une fois le back-end défini.
 

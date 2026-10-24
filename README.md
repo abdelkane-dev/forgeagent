@@ -1,155 +1,181 @@
 # ForgeAgent
 
-Console open source et auto-hébergée pour **créer, tester, intégrer et superviser des agents IA** dont le cerveau est l’API Claude. Outil pour développeurs : aucune partie client final. Premier projet cible : Bonaco Pro.
+Console open source et auto-hébergée pour **forger, tester, intégrer et superviser des agents IA** dont le cerveau est l’API Claude. C’est un outil pour développeurs, sans partie client final. Premier projet cible : Bonaco Pro.
 
-- **Console** (`/`, Vite + React) : création d’agents en 7 étapes, pilotage (versions, skills, déclencheurs, outils, mémoire, logs), bac à sable, intégrations (widget, REST, MCP, clés, webhooks), observabilité, sécurité, équipe interne.
-- **API** (`server/`, Hono + PostgreSQL + BullMQ) : REST documentée (OpenAPI), authentification, runtime des agents sous permissions, widget pour sites existants, et une **équipe interne d’agents** qui conçoit, sécurise, construit, teste et surveille vos agents.
+**Chaque agent est un espace scellé.** Ses connaissances et vecteurs, sa mémoire, ses intégrations et secrets, ses clés API, ses tests, ses workflows, ses coûts, son audit et sa documentation n’appartiennent qu’à lui. Seuls ses membres y accèdent, et c’est PostgreSQL lui-même qui l’impose (Row-Level Security).
 
-## Démarrage rapide
+- **Console** (`/`, Vite + React) :
+  - un espace par agent, avec 10 onglets : Aperçu, Connaissances et mémoire, Intégration, Test et évaluation, Workflows, Audit, Coûts et usage, Équipe et accès, Documentation, Paramètres ;
+  - La Forge, la vue de l’équipe interne ;
+  - un tableau de bord limité à vos agents ;
+  - l’administration de la plateforme.
+- **API** (`server/`, Hono + PostgreSQL/pgvector + BullMQ + S3) :
+  - une API REST documentée (OpenAPI), avec toutes les routes d’un agent sous `/v1/agents/{agentId}/…` ;
+  - l’exécution des agents sous permissions, des workflows et des évaluations avec test de régression ;
+  - un widget pour les sites existants ;
+  - une **équipe interne d’agents** qui conçoit, sécurise, construit, teste et surveille vos agents.
+
+## Installation
 
 ```bash
 node scripts/init-env.mjs       # crée .env avec des secrets aléatoires
-docker compose up -d --build    # PostgreSQL + Redis + API + worker (http://localhost:8787)
+docker compose up -d --build    # PostgreSQL (pgvector) + Redis + S3 (SeaweedFS) + API + worker
 npm install
 npm run dev                     # console sur http://localhost:5173
 ```
 
-Connectez-vous avec un compte de démonstration (mot de passe : `forgeagent-demo`, voir `SEED_PASSWORD`) :
+Comptes de démonstration (mot de passe : `SEED_PASSWORD` dans `.env`, `forgeagent-demo` par défaut) :
 
-| Compte | Rôle |
-|---|---|
-| abdoul@bonaco.pro | Administrateur |
-| ines@bonaco.pro | Éditeur |
-| theo@bonaco.pro | Lecteur |
+| Compte | Rôle plateforme | Agents visibles |
+|---|---|---|
+| abdoul@bonaco.pro | Administrateur | propriétaire de 4 agents, éditeur du 5e |
+| ines@bonaco.pro | Membre | éditrice de 2 agents, propriétaire de « Rapports hebdo » |
+| theo@bonaco.pro | Membre | lecteur de « Assistant d’administration » uniquement |
 
-Documentation de l’API : <http://localhost:8787/docs> (Swagger UI) et `/v1/openapi.json`.
+Les clés API de démonstration (une série par agent) s’affichent une seule fois dans les journaux de l’API au premier démarrage. La documentation de l’API est disponible sur <http://localhost:8787/docs> (Swagger UI) et sur `/v1/openapi.json`.
 
 ### Autres modes
 
 | Commande | Usage |
 |---|---|
-| `npm run dev:demo` | Console seule, sans back-end : données fictives en mémoire |
-| `npm run server` | API sans Docker : PGlite (Postgres embarqué) + file en mémoire, un seul processus |
-| `npm run test:server` | Tests du serveur (PGlite en mémoire, modèle simulé) |
-| `npm run test:e2e` | Parcours Playwright complet sur la vraie stack (Chrome installé requis) |
-| `node scripts/smoke.mjs` | Vérification rapide d’une API lancée |
+| `npm run dev:demo` | Console seule, sans back-end. Les données sont fictives, mais les mêmes règles d’isolation sont simulées. |
+| `npm run server` | API sans Docker : PGlite (Postgres embarqué avec pgvector), file en mémoire, fichiers sur disque. |
+| `npm run test:server` | Tests du serveur : isolation, routes, scénario de l’équipe interne (PGlite en mémoire, modèle simulé). |
+| `npm run test:e2e` | Parcours Playwright complet sur la vraie stack (Chrome requis, `E2E_PASSWORD` = `SEED_PASSWORD`). |
 
-Sans `ANTHROPIC_API_KEY`, le moteur fonctionne en mode **simulé** : déterministe et hors ligne, il convient aux démos et aux tests. Ajoutez la clé dans `.env` pour utiliser Claude.
-
-## Architecture
-
-```
-console (React)  ──cookie de session──▶  API Hono (/v1, OpenAPI)  ──▶  PostgreSQL (Drizzle)
-site client  ──widget.js + clé publiable──▶  /v1/widget/*            ──▶  Redis : BullMQ + pub/sub
-                                             │
-                                             ├─ runtime des agents utilisateurs (permissions vérifiées en code)
-                                             └─ équipe interne : files team.<rôle>  ◀──  worker(s)
-```
-
-### Équipe interne (moteur multi-agents)
-
-| Rôle | Modèle (`MODEL_*`) | Périmètre (capacités serveur) |
-|---|---|---|
-| Orchestrateur | sonnet | `readRequest` : choisit l’étape suivante parmi celles que le code autorise |
-| Architecte | opus | `readCatalog`, `readProject` : propose la configuration |
-| Contrôleur sécurité | opus | `readCatalog` : droit de veto, validation humaine |
-| Constructeur | sonnet | `createAgentFromPlan` : crée l’agent avec le plan validé |
-| Testeur | haiku | `runChecks`, `runSandbox` : vérifications + scénario en bac à sable |
-| Superviseur | haiku | `readAgentHealth`, `readRecentErrors`, `notify` : surveillance continue |
-
-- Chaque agent est un module `server/agents/<rôle>/` avec son `prompt.md`. Son contexte ne contient **que** ses capacités (`ROLE_CAPABILITIES`).
-- Les agents ne s’appellent jamais entre eux. L’Orchestrateur publie des tâches sur les files `team.<rôle>`, les spécialistes les consomment, et les résultats vont dans `team_tasks`. Chaque échange est inscrit dans `team_events`, ce qui permet de **rejouer** une demande (vue « Équipe interne »).
-- Garde-fous :
-  - limites par demande (`TEAM_MAX_STEPS`, `TEAM_MAX_AGENT_CALLS`, `TEAM_MAX_TOKENS`) ;
-  - détection de boucle (même rôle et même entrée plus de `TEAM_MAX_REPEATS` fois) ;
-  - veto sécurité : le modèle ne peut que durcir le verdict du code ;
-  - validation humaine pour les actions sensibles ;
-  - plafond de permissions fixé par l’utilisateur et appliqué en code (`clampPlan`, `assertGrantable`) ;
-  - sorties de modèle validées par Zod et traitées comme des données ;
-  - audit complet.
-- Tout ce qui est déterministe reste du code : permissions, validation, limites, journalisation.
-
-### Runtime des agents utilisateurs
-
-`server/src/runtime/run-agent.ts` enchaîne les étapes suivantes :
-1. Vérifications préalables : arrêt d’urgence, statut, plafond de coût, rate limit.
-2. Garde-fou anti-injection.
-3. Outils dérivés des connecteurs accordés (lecture, ou écriture si accordée) et `perform_action`, limité aux actions autorisées et non interdites.
-4. Validation humaine imposée pour les actions sensibles ou selon l’autonomie.
-5. Boucle d’appels d’outils avec un nombre d’étapes maximal et un timeout.
-6. Coût en tokens, traces pas à pas (`runs`, `run_steps`) et logs en direct (SSE).
-
-### Intégration à un site existant
-
-1. Créez une **clé publiable** dans Intégrations › Clés API (type « Publiable »).
-2. Ajoutez le domaine du site dans Projets › Domaines autorisés.
-3. Collez le snippet :
-   ```html
-   <script src="http://localhost:8787/widget.js" data-agent="agt_…" data-project="bonaco-pro" data-key="fa_pub_…" defer></script>
-   ```
-4. Dans Agent › Site externe, **Vérifier** contrôle que le site répond et charge le widget. **Envoyer** pousse un événement (`ping`, `page.context`…) aux pages ouvertes, qui répondent en direct.
-
-Site de démo local : `http://localhost:8787/demo-site?agent=<id>&key=<clé publiable>`.
-
-### Sécurité
-
-- Mots de passe **scrypt**, sessions en cookie `HttpOnly; SameSite=Lax` stockées **hachées**, protection CSRF par origine, tentatives de connexion limitées.
-- Clés API stockées en **HMAC-SHA256 avec poivre**, secret affiché une seule fois. Clés de test : bac à sable imposé. Clés liées à un projet. Clés publiables limitées au widget et aux domaines autorisés.
-- Secrets au repos (connecteurs, webhooks) chiffrés en **AES-256-GCM**. Webhooks signés (`X-Forge-Signature`).
-- Validation **Zod** de toutes les entrées. Requêtes Drizzle paramétrées. Matrice de rôles en code. Seul un administrateur peut accorder une action sensible.
-- Protection **SSRF** sur les vérifications de site, les webhooks et l’indexation (`ALLOW_PRIVATE_SITE_URLS=false` en production).
-- Logs **pino** expurgés (cookies, clés, mots de passe) ; données personnelles masquées dans les traces. Journal d’audit **en ajout seul** (trigger SQL).
-- Aucun secret dans le dépôt : `.env` est ignoré et généré par `scripts/init-env.mjs`.
+Sans `ANTHROPIC_API_KEY`, le moteur fonctionne en mode **simulé** : il est déterministe et hors ligne, ce qui convient aux démos et aux tests. Ajoutez la clé dans `.env` pour utiliser Claude.
 
 ## Variables d’environnement
 
-Toutes sont décrites dans [`.env.example`](.env.example). Les principales :
+Toutes sont décrites dans [`.env.example`](.env.example). Voici les principales :
 
 | Variable | Rôle |
 |---|---|
 | `VITE_API_URL` | URL de l’API pour la console (vide ⇒ mode démo) |
-| `DATABASE_URL` | `postgres://…` ou `pglite://./.data/pglite` |
+| `DATABASE_URL` | Connexion **applicative** (`forge_app`, soumise à la RLS) : `postgres://forge_app:…` ou `pglite://…` |
+| `DATABASE_ADMIN_URL` | Connexion propriétaire, réservée aux migrations et au seed |
+| `APP_DB_PASSWORD` | Mot de passe du rôle `forge_app`, posé par les migrations |
+| `STORAGE_DRIVER`, `S3_*` | Fichiers des agents : `s3` (préfixe `agents/<agentId>/`) ou `fs` |
 | `QUEUE_DRIVER` / `REDIS_URL` | `bullmq` (Redis) ou `memory` |
 | `ANTHROPIC_API_KEY` | Clé Claude (sinon modèle simulé) |
-| `MODEL_ORCHESTRATOR` … `MODEL_SUPERVISOR` | Modèle par rôle interne |
-| `KEY_PEPPER`, `ENCRYPTION_KEY` | Secrets de hachage et de chiffrement |
+| `MODEL_*` | Modèle par rôle interne (voir La Forge), et `MODEL_SUPERVISOR_ESCALATION` |
+| `KEY_PEPPER`, `ENCRYPTION_KEY` | Hachage des clés, chiffrement (avec une clé dérivée par agent), jetons de capacité |
+| `CAPABILITY_TTL_SEC`, `REGRESSION_TOLERANCE` | Durée d’un jeton de tâche, baisse de score tolérée avant publication |
 | `TEAM_MAX_*`, `RUN_MAX_STEPS`, `RUN_TIMEOUT_MS` | Garde-fous |
-| `CONSOLE_ORIGINS`, `PUBLIC_URL` | CORS de la console, URL publique de l’API |
+
+## Architecture
+
+```
+console (React) ──cookie──▶ API Hono /v1 ──▶ scoped(contexte) ──▶ PostgreSQL + pgvector (RLS, rôle forge_app)
+site client ──widget.js + clé publiable de l’agent──▶ /v1/widget/*      ├─▶ S3 : agents/<agentId>/…
+                                                       │                 └─▶ Redis : BullMQ + pub/sub agent:<id>:*
+                                                       ├─ runtime d’un agent (son contexte, ses permissions)
+                                                       └─ La Forge : files team.<rôle>, une tâche = un agent ◀── worker(s)
+```
+
+### Isolation par agent
+
+- **En base.** Chaque table d’agent porte `agent_id`, avec `ENABLE` et `FORCE ROW LEVEL SECURITY` (29 tables). L’API se connecte avec `forge_app`, un rôle qui n’est ni super-utilisateur ni propriétaire. Chaque transaction déclare son contexte (`app.mode`, `app.user_id`, `app.agent_id`) dans `scoped()` :
+  - `user` : les agents dont l’utilisateur est membre, limités à l’agent de la route quand elle en nomme un ;
+  - `task` : un seul agent (exécutions, worker, tâches de l’équipe) ;
+  - `platform` : un seul agent, en maintenance par un administrateur, avec chaque accès inscrit dans l’audit de l’agent ;
+  - sans contexte, la base ne renvoie aucune ligne.
+- **Accès.** Les rôles par agent sont `owner` (accès, clés, secrets, purge), `editor` (configure, teste, publie) et `viewer` (consulte, teste en environnement de test). Un non-membre reçoit **404** sur toute route de l’agent, sans fuite d’existence. Le rôle plateforme `admin` ne donne aucune donnée d’agent, seulement leurs métadonnées.
+- **Clés et secrets.** Une clé API appartient à un agent et n’ouvre que lui. Elle est hachée par HMAC et résolue par une fonction `SECURITY DEFINER`. Les secrets sont chiffrés en AES-256-GCM avec une clé dérivée par agent (HKDF). Le widget n’accepte que la clé publiable de l’agent, depuis ses origines autorisées.
+- **Vecteurs et fichiers.** Les vecteurs pgvector (index HNSW) sont protégés par la même RLS. `AgentStorage` refuse tout chemin hors de `agents/<agentId>/`.
+- **Canaux.** Files, caches, logs en direct et événements du site sont préfixés `agent:<id>:…`. Les prompts ne contiennent que le contexte de l’agent exécuté.
+- **Suppression.** Un export JSON est proposé d’abord (sans valeurs de secrets). La purge supprime ensuite les lignes en cascade, y compris les vecteurs et l’audit, ainsi que les fichiers du préfixe et les secrets.
+
+### La Forge (équipe interne)
+
+| Rôle (nom affiché) | Rôle technique | Modèle par défaut | Capacités serveur |
+|---|---|---|---|
+| Le Maître de Forge | orchestrator | Opus | `readRequest` |
+| Le Dessinateur | architect | Opus | `readCatalog`, `readProject` |
+| La Sentinelle | security | Opus | `readCatalog` (droit de veto) |
+| Le Forgeron | builder | Sonnet | `configureAgentFromPlan` |
+| Le Trempeur | tester | Sonnet | `runChecks`, `runSandbox`, `runEvaluation` |
+| Le Veilleur de Feu | supervisor | Haiku, Sonnet sur anomalie | `readAgentHealth`, `readRecentErrors`, `notify` |
+
+- « Forger un agent » crée l’agent immédiatement, en état **Démarrage**. Le demandeur en devient propriétaire, et toute la construction se passe ensuite dans les murs de cet agent.
+- Chaque tâche (`team_tasks`) cible **un seul agent** et reçoit un jeton de capacité signé et limité dans le temps. Le jeton est vérifié avant chaque appel, et les capacités n’ouvrent qu’un contexte `task` sur cet agent.
+- Les agents internes ne communiquent que par BullMQ. Les tokens consommés sont imputés à l’agent cible (`usage_costs.source = team`). Chaque échange est écrit dans `team_events` et dans l’audit de l’agent, ce qui permet de le rejouer depuis La Forge.
+- Garde-fous :
+  - limites d’étapes, d’appels et de tokens ;
+  - détection de boucle ;
+  - veto de la Sentinelle ;
+  - validation humaine d’un propriétaire pour les actions sensibles ;
+  - plafond de permissions fixé par le demandeur ;
+  - sorties des modèles validées par Zod et traitées comme des données.
+
+### Exécution, workflows, évaluations
+
+- `runAgent` vérifie l’arrêt d’urgence, le statut, les plafonds jour et mois de l’agent et le rate limit, puis applique le garde-fou anti-injection. Il utilise ensuite les connaissances (recherche pgvector) et la mémoire courte et longue de l’agent, ainsi que ses outils et `perform_action` limité à ses actions autorisées. La validation humaine dépend de l’autonomie. Chaque exécution est tracée, ses coûts sont imputés et elle est inscrite dans l’audit.
+- L’**environnement de test** utilise des outils simulés. Il est tracé mais non budgété.
+- Les **workflows** se déclenchent manuellement, par cron ou par webhook (avec la clé de l’agent). Les étapes possibles sont : modèle, condition, validation, outil, sortie. Ils sont versionnés à la publication, reprennent jusqu’à 3 fois en cas d’échec et se mettent en pause en attendant une validation.
+- Les **évaluations** gardent un historique des scores par version. Les suites de régression sont rejouées sur la configuration candidate avant chaque nouvelle version, et une baisse de score au-delà de la tolérance bloque la publication.
+
+### Intégration à un site existant
+
+1. Dans l’agent, ouvrez **Équipe et accès** et créez une clé de type « Publiable ».
+2. Dans **Intégration**, reliez le site : son origine est ajoutée aux origines autorisées du widget.
+3. Collez le snippet :
+   ```html
+   <script src="http://localhost:8787/widget.js" data-agent="agt_…" data-key="fa_pub_…" defer></script>
+   ```
+4. **Vérifier** contrôle que le site répond et charge le widget de cet agent. La console d’interaction envoie ensuite des événements (`ping`, `page.context`…). Les actions sur le site exigent la permission « Agir sur le site externe ».
+
+Un site de démo local est disponible : `http://localhost:8787/demo-site?agent=<id>&key=<clé publiable>`.
+
+### Sécurité
+
+- Mots de passe hachés en **scrypt**. Sessions dans un cookie `HttpOnly; SameSite=Lax`, stockées hachées. Protection CSRF par origine. Tentatives de connexion limitées.
+- Protection contre l’IDOR : chaque identifiant enfant est filtré par `agent_id`, et la RLS l’impose une seconde fois. La suite `test/isolation.test.ts` appelle **chaque** route agent de l’OpenAPI en tant qu’étranger.
+- Injection entre agents :
+  - aucune capacité ne prend un autre `agentId` ;
+  - les sorties des modèles sont des données ;
+  - les contenus externes sont balisés comme non fiables.
+- Validation **Zod** de toutes les entrées, requêtes paramétrées, protection **SSRF** (`ALLOW_PRIVATE_SITE_URLS=false` en production), logs expurgés, audits **en ajout seul** (trigger SQL).
+- Aucun secret dans le dépôt : `.env` est ignoré et généré par `scripts/init-env.mjs`.
 
 ## Structure
 
 ```
-src/                      console React (voir src/api/ : contrat ForgeApi, mock, http)
+src/                      console React
+  api/                    contrat ForgeApi (client.ts), types, mock isolant, http, hooks par agent
+  pages/app/agent/        espace d’un agent : un fichier par onglet
+  pages/app/forge.tsx     La Forge
+  labels.ts               tous les libellés (FORGE_THEME.md)
 server/
-  src/db/                 schéma Drizzle, migrations (server/drizzle), seed
-  src/http/               routeur typé (validation + OpenAPI), schémas Zod, rôles
-  src/routes/             auth, agents, ressources, ops, admin, équipe interne, widget
-  src/runtime/            exécution des agents, connecteurs, vérifications, site externe, cron, indexation
-  src/team/               moteur de l’équipe interne (engine, capacités, plan)
-  agents/<rôle>/          prompt.md + module de chaque agent interne
-  src/llm/                fournisseurs Anthropic et simulé
-  src/queue/              BullMQ ou mémoire
-  test/                   tests vitest (équipe interne, routes critiques)
+  drizzle/                migrations : extensions, schéma, isolation (RLS, rôle, fonctions)
+  src/db/                 schéma Drizzle, client (scoped, asAgent), seed
+  src/http/               routeur typé (contexte d’agent, rôles, OpenAPI), schémas Zod
+  src/routes/             auth, plateforme, agents, espace agent, La Forge, admin, widget
+  src/services/           accès, connaissances, évaluations, workflows, usage, docs, cycle de vie
+  src/runtime/            exécution, vérifications, site externe, planificateur
+  src/team/ + agents/     moteur de La Forge, capacités, prompt.md par rôle
+  test/                   isolation, API, La Forge
 scripts/                  init-env, smoke, e2e
-docker-compose.yml        postgres, redis, api, worker
+FORGE_THEME.md            thème : libellés, états, équipe, palette, animation
 ```
 
 ## Contribuer
 
 1. `node scripts/init-env.mjs && npm install && npm --prefix server install`
 2. Développez avec `npm run server` (API, PGlite) et `npm run dev` (console).
-3. Avant une PR : `npm run lint`, `npm run build`, `npm --prefix server run lint`, `npm --prefix server run typecheck`, `npm run test:server`.
-4. Schéma modifié : `npm --prefix server run db:generate` (nouvelle migration dans `server/drizzle/`), jamais de modification d’une migration existante.
-5. Code, noms d’API et commentaires en anglais ; interface en français.
-6. Toute action d’agent passe par une vérification en code : n’ajoutez jamais d’autorisation décidée par un modèle.
+3. Avant une PR, lancez : `npm run lint`, `npm run build`, `npm --prefix server run lint`, `npm --prefix server run typecheck`, `npm run test:server`.
+4. Si vous modifiez le schéma, lancez `npm --prefix server run db:generate`. Toute nouvelle table d’agent porte `agent_id` et doit être ajoutée à la migration d’isolation (RLS et politiques). La suite d’isolation doit rester verte.
+5. Les données d’un agent ne se lisent que dans `scoped()` ou `asAgent()`. N’appelez jamais `db` dans une transaction, et n’imbriquez pas de `scoped()`.
+6. Le code, les noms d’API et les commentaires sont en anglais ; l’interface est en français. Tous les libellés passent par `src/labels.ts`.
+7. N’ajoutez jamais d’autorisation décidée par un modèle : toute action passe par une vérification en code.
 
 ## Limites connues
 
-- **Connecteurs MCP** : les outils exposés aux agents ont des réponses simulées réalistes. Le transport MCP réel reste à brancher dans `server/src/runtime/connectors.ts`.
-- **Modèle** : sans `ANTHROPIC_API_KEY`, tout tourne en mode simulé. Les tests couvrent ce mode ; le chemin Anthropic suit l’API officielle du SDK mais n’a pas été exécuté ici faute de clé.
-- **Emails** : pas d’envoi. Les invitations produisent un lien à transmettre ; la réinitialisation du mot de passe répond sans envoyer de message.
-- **Connaissances** : les sites web et les fichiers texte ou Markdown sont indexés. L’extraction PDF/Word n’est pas disponible. La recherche se fait par mots-clés, sans embeddings.
-- **Workflows et délégations A2A** : ils sont enregistrés et modifiables, mais le moteur ne les exécute pas encore. L’exécution de test du canvas est une animation côté console.
-- **Évaluations** : chaque lancement rejoue au plus 10 cas en bac à sable. Le score mesure la réussite des exécutions, pas une notation sémantique.
-- **Export OpenTelemetry** : l’adresse est enregistrée, mais l’export n’est pas encore implémenté.
-- **Historique de démonstration** : le seed stocke environ 1 exécution réelle pour 50, les volumes du graphique sur 7 jours sont donc réduits.
+- **Connecteurs MCP** : les outils exposés aux agents renvoient des réponses simulées réalistes. Le transport MCP réel reste à brancher dans `server/src/runtime/connectors.ts`.
+- **Modèle** : sans `ANTHROPIC_API_KEY`, tout tourne en mode simulé. Les tests couvrent ce mode. Le chemin Anthropic suit le SDK officiel mais n’a pas été exécuté ici, faute de clé.
+- **Embeddings** : le hachage de caractéristiques (256 dimensions) fonctionne hors ligne. Il est moins fin qu’un modèle d’embeddings ; l’interface `Embedder` permet d’en brancher un.
+- **Fichiers** : le texte, le Markdown et les sites web sont indexés. Les PDF et Word sont stockés, mais pas encore extraits.
+- **Emails** : aucun envoi. Les invitations produisent un lien à transmettre.
+- **Évaluations** : un cas réussit si la réponse ne contient pas d’erreur et inclut les mots attendus. Ce n’est pas une notation sémantique.
+- **Stockage S3 en Docker** : la stack utilise SeaweedFS, car les images MinIO ne sont plus publiées sur les registres publics. N’importe quel service S3 convient via `S3_*`.
+- **Historique de démonstration** : le seed stocke environ une exécution réelle sur cinquante, ce qui réduit les volumes des graphiques.
