@@ -7,7 +7,7 @@
 **Forgez, testez, intégrez et supervisez des agents IA propulsés par Claude, sur votre propre infrastructure.**
 Chaque agent est un espace scellé : ses données, ses clés et ses coûts n’appartiennent qu’à lui.
 
-[![CI](https://github.com/__REPO__/actions/workflows/ci.yml/badge.svg)](https://github.com/__REPO__/actions/workflows/ci.yml)
+[![CI](https://github.com/abdelkane-dev/forgeagent/actions/workflows/ci.yml/badge.svg)](https://github.com/abdelkane-dev/forgeagent/actions/workflows/ci.yml)
 [![Licence : Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-orange.svg)](LICENSE)
 ![Node 22](https://img.shields.io/badge/node-22-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
@@ -49,7 +49,7 @@ Les équipes qui branchent des agents IA sur leurs produits se heurtent toujours
 > Prérequis : **Node.js 22+** et **Docker** (Desktop ou Engine avec Compose v2).
 
 ```bash
-git clone https://github.com/__REPO__.git && cd forgeagent
+git clone https://github.com/abdelkane-dev/forgeagent.git && cd forgeagent
 node scripts/init-env.mjs        # crée .env avec des secrets aléatoires
 docker compose up -d --build     # PostgreSQL (pgvector) + Redis + S3 + API + worker
 npm install && npm run dev       # console sur http://localhost:5173

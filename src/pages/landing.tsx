@@ -11,7 +11,7 @@ import { useTheme } from '@/lib/theme'
 import { AGENT_TYPE_ORDER, AGENT_TYPES } from '@/labels'
 import { cn } from '@/lib/utils'
 
-const GITHUB = 'https://github.com/forgeagent/forgeagent'
+const GITHUB = 'https://github.com/abdelkane-dev/forgeagent'
 
 /* ---------- Nav ---------- */
 function Nav() {
