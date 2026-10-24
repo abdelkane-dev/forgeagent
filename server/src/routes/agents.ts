@@ -78,6 +78,54 @@ export function agentRoutes(app: Hono<AppEnv>) {
     ({ params, body, principal }) => sendToSite(params.id, body.event, actorOf(principal).name),
   )
 
+  /**
+   * The agent as an MCP server (JSON-RPC over HTTP, stateless): one tool, `run`.
+   * Lets other agents (Claude Code, Claude Desktop, other ForgeAgent agents) delegate to it.
+   */
+  route(
+    app,
+    {
+      method: 'post',
+      path: '/agents/:id/mcp',
+      tag: 'Exécution',
+      summary: 'Serveur MCP de l’agent (initialize, tools/list, tools/call « run »)',
+      auth: 'session_or_key',
+      permission: 'agents.run',
+      body: z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]).optional(), method: z.string().max(100), params: z.record(z.string(), z.unknown()).optional() }),
+    },
+    async ({ c, params, body, principal }) => {
+      await assertKeyScope(principal, params.id)
+      if (body.id === undefined) return c.body(null, 202) // notification
+      const reply = (result: unknown) => ({ jsonrpc: '2.0', id: body.id, result })
+      const agent = await getAgent(params.id)
+      switch (body.method) {
+        case 'initialize':
+          return reply({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: `forgeagent-${agent.id}`, version: String(agent.version) } })
+        case 'ping':
+          return reply({})
+        case 'tools/list':
+          return reply({
+            tools: [
+              {
+                name: 'run',
+                description: `Demande à « ${agent.name} » : ${agent.mission.slice(0, 300)}`,
+                inputSchema: { type: 'object', properties: { input: { type: 'string', description: 'La demande' } }, required: ['input'] },
+              },
+            ],
+          })
+        case 'tools/call': {
+          const input = String((body.params?.arguments as { input?: unknown } | undefined)?.input ?? '').slice(0, 8000)
+          if (body.params?.name !== 'run' || !input) return { jsonrpc: '2.0', id: body.id, error: { code: -32602, message: 'Outil « run » avec { input } attendu' } }
+          const sandbox = principal?.kind === 'key' && principal.environment === 'test'
+          const r = await runAgent(params.id, input, { source: 'api', sandbox })
+          return reply({ content: [{ type: 'text', text: r.message.content }], isError: r.status !== 'ok' })
+        }
+        default:
+          return { jsonrpc: '2.0', id: body.id, error: { code: -32601, message: `Méthode inconnue : ${body.method}` } }
+      }
+    },
+  )
+
   route(app, { method: 'delete', path: '/agents/:id/memories', tag: 'Agents', summary: 'Effacer la mémoire d’un agent', permission: 'agents.write', status: 204 }, async ({ params, principal }) => {
     await db.delete(s.memories).where(eq(s.memories.agentId, params.id))
     await audit(actorOf(principal).name, 'user', 'a effacé la mémoire', params.id)

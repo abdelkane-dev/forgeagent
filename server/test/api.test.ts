@@ -205,3 +205,16 @@ describe('OpenAPI', () => {
     expect(doc.paths['/v1/agents/{id}/run'].post).toBeTruthy()
   })
 })
+
+describe('MCP', () => {
+  it('expose l’agent comme serveur MCP avec une clé secrète', async () => {
+    const r = await call(admin, 'POST', '/v1/api-keys', { name: 'mcp', environment: 'live', scope: 'secret', projectId: 'prj_bonaco' })
+    const key = (await r.json()).secret
+    const rpc = (method: string, params?: unknown) =>
+      app.request('/v1/agents/agt_8f3k2/mcp', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })
+    expect((await (await rpc('initialize')).json()).result.serverInfo.name).toBe('forgeagent-agt_8f3k2')
+    expect((await (await rpc('tools/list')).json()).result.tools[0].name).toBe('run')
+    const out = await (await rpc('tools/call', { name: 'run', arguments: { input: 'Vérifie les erreurs' } })).json()
+    expect(out.result.content[0].text).toMatch(/Analyse terminée/)
+  })
+})

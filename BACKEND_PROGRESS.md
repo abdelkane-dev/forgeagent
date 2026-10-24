@@ -22,29 +22,45 @@ Légende : [x] fini · [~] en cours · [ ] à faire
 - [x] Migrations (`server/drizzle/`), dont trigger append-only sur `audit_log`
 - [x] Seed de démonstration (Bonaco Pro, 5 agents, historique 7 jours, clés réelles hachées)
 
+- [x] Colonne `content` des connaissances (migration 0002) pour l'indexation réelle
+
 ## Phase 2 — API REST
-- [ ] Routeur typé + OpenAPI + Swagger UI
-- [ ] Auth (login, logout, me, signup admin initial), rôles
-- [ ] Ressources : overview, agents, projects, skills, connectors, traces, logs (+SSE), approvals, audit, evals, knowledge, memories, templates, team, api-keys, webhooks, notifications, workflows, delegations, schedules, settings, playground
+- [x] Routeur typé (`server/src/http/router.ts`) : validation Zod + contrôle de rôle + OpenAPI 3.1 (`/v1/openapi.json`, Swagger UI `/docs`), 80+ routes
+- [x] Auth : login, logout, me, signup (instance vide uniquement), invitations (lien), reset (sans énumération), cookie de session haché
+- [x] Ressources : overview, agents (+run, checks, versions, duplicate, site, mémoire), projects, skills, connectors, templates, traces, logs (+SSE), approvals, audit, evals, knowledge, memories, team, api-keys, webhooks (signés), notifications, workflows, delegations, schedules, settings
 
 ## Phase 3 — Moteur d'agents (équipe interne)
-- [ ] Abstractions : file (bullmq/memory), LLM (anthropic/simulated)
-- [ ] 6 agents internes (`server/agents/<rôle>/prompt.md` + module)
-- [ ] Orchestrateur, limites (étapes, appels, tokens), détection de boucle, veto sécurité, validation humaine
-- [ ] Runtime des agents utilisateurs (permissions, outils, logs pas à pas, timeouts, rate limit, coût)
-- [ ] Superviseur périodique
-- [ ] Tests : scénario complet, veto, boucle
+- [x] Abstractions : file (bullmq/memory), LLM (anthropic/simulated), bus (Redis pub/sub/mémoire)
+- [x] 6 agents internes (`server/agents/<rôle>/prompt.md` + `index.ts`), modèles via `MODEL_*`
+- [x] Moteur (`server/src/team/engine.ts`) : files par rôle, transitions imposées par le code, limites étapes/appels/tokens, détection de boucle, veto, validation humaine (reprise après approbation), `team_tasks` + `team_events` rejouables
+- [x] Capacités cloisonnées par rôle (`ROLE_CAPABILITIES`), plafond de permissions (`clampPlan`, `assertGrantable`)
+- [x] Runtime des agents utilisateurs : permissions en code, outils connecteurs, `perform_action`, validations, garde-fou injection, PII, timeout, rate limit, coût, traces pas à pas, recherche dans les connaissances
+- [x] Superviseur périodique (`SUPERVISOR_INTERVAL_SEC`) + ronde manuelle ; planificateur cron des agents
+- [x] Tests : scénario complet, validation humaine, veto, boucle, plafond, cloisonnement, Superviseur (7 tests)
 
 ## Phase 4 — Intégration aux sites
-- [ ] `widget.js`, clé publiable par projet, CORS par projet, événements site ⇄ agent, site de démo
+- [x] `widget.js` (Shadow DOM, sans dépendance) configuré par `data-agent`/`data-project`/`data-key`
+- [x] Clé publiable par projet ; origine vérifiée contre les domaines autorisés du projet (CORS par projet, sans preflight)
+- [x] Vérification de site réelle (fetch SSRF-safe, détection du widget), événements console → site par canal SSE avec accusé de réception
+- [x] Site de démo `/demo-site` ; snippets du front fonctionnels de bout en bout (widget, REST, JS, Python, MCP : `POST /v1/agents/:id/mcp`)
 
 ## Phase 5 — Sécurité
-- [ ] En-têtes, rate limiting, CSRF, SSRF (vérification de sites), escalade de permissions, logs masqués
+- [x] En-têtes sécurisés, limite de taille, CORS console, CSRF par origine, rate limit (login, runs, widget)
+- [x] scrypt, HMAC des clés, AES-GCM des secrets, audit append-only, logs pino expurgés, masquage PII
+- [x] SSRF (sites, webhooks, indexation), anti-escalade (éditeur ≠ actions sensibles, dernier admin protégé, plafond équipe)
+- [x] Aucun secret dans le dépôt (`scripts/init-env.mjs`)
 
 ## Phase 6 — Front
-- [ ] Auth réelle, garde de routes, `VITE_API_URL`, vue « Équipe interne », snippets avec clé publiable
+- [x] `ForgeApi` étendu (auth, internalTeam, clés publiables) ; `VITE_API_URL` ⇒ HTTP, sinon mock (`npm run dev:demo`)
+- [x] Connexion réelle, invitation, garde de session, déconnexion, redirection 401
+- [x] Vue « Équipe interne » (agents, statut, tokens par rôle, files, validations, demandes rejouables)
+- [x] Clés publiables, snippets réels, import de fichiers texte, validations d'équipe dans Sécurité
 
 ## Phase 7 — Vérification
-- [ ] Tests serveur (auth, permissions, exécution)
-- [ ] Playwright : créer, skill, tester, intégrer au site de démo, logs
-- [ ] Build + lint front et serveur, docker compose, README
+- [x] Tests serveur : 30 (équipe interne + routes critiques : auth, CSRF, rôles, exécution, clés, widget, MCP, OpenAPI)
+- [x] Playwright (`npm run test:e2e`) sur la vraie stack : connexion, création, skill, test, clé, domaine, site de démo, widget, événement, logs, équipe interne : 11/11
+- [x] Build + lint front et serveur sans erreur ni avertissement ; `docker compose up` (Postgres 17, Redis 7, API, worker) vérifié ; smoke test
+- [x] README (installation, variables, architecture, sécurité, contribution, limites)
+
+## Limites connues
+Voir la section du même nom dans `README.md` : transport MCP réel, envoi d'emails, extraction PDF/Word, exécution des workflows et A2A, export OTel, notation sémantique des évaluations.
