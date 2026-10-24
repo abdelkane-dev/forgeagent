@@ -58,6 +58,27 @@ export default function Login() {
   const next = params.get('next')
   const invite = params.get('invite')
 
+  const welcome = (user: Awaited<ReturnType<typeof api.auth.login>>, created = false) => {
+    qc.setQueryData(['me'], user)
+    toast.success(created ? 'Compte créé, bienvenue' : `Bonjour ${user.name}`)
+    navigate(next && next.startsWith('/app') ? next : '/app')
+  }
+
+  /** One click on a demo account: fills the form and signs in. */
+  const demoSignIn = async (demoEmail: string, demoPassword: string) => {
+    setEmail(demoEmail)
+    setPassword(demoPassword)
+    setErrors({})
+    setPending(true)
+    try {
+      welcome(await api.auth.login(demoEmail, demoPassword))
+    } catch (err) {
+      setErrors({ form: err instanceof Error ? err.message : 'Connexion impossible' })
+    } finally {
+      setPending(false)
+    }
+  }
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const errs: Record<string, string> = {}
@@ -78,9 +99,7 @@ export default function Login() {
           : mode === 'signup'
             ? await api.auth.signup(name, email, password)
             : await api.auth.login(email, password)
-      qc.setQueryData(['me'], user)
-      toast.success(mode === 'signup' ? 'Compte créé, bienvenue' : `Bonjour ${user.name}`)
-      navigate(next && next.startsWith('/app') ? next : '/app')
+      welcome(user, mode === 'signup')
     } catch (err) {
       setErrors({ form: err instanceof Error ? err.message : 'Connexion impossible' })
     } finally {
@@ -139,7 +158,7 @@ export default function Login() {
                 <Input id="l-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} aria-invalid={!!errors.email} />
               </Field>
               {mode !== 'reset' && (
-                <Field label="Mot de passe" htmlFor="l-pass" error={errors.password}>
+                <Field label="Mot de passe" htmlFor="l-pass" error={errors.password} hint={mode === 'signup' || invite ? '10 caractères minimum.' : undefined}>
                   <div className="relative">
                     <Input id="l-pass" type={show ? 'text' : 'password'} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={(e) => setPassword(e.target.value)} className="pr-10" aria-invalid={!!errors.password} />
                     <button type="button" onClick={() => setShow((s) => !s)} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground" aria-label={show ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>
@@ -181,35 +200,51 @@ export default function Login() {
                         type="button"
                         variant="outline"
                         size="lg"
-                        aria-disabled={!on}
-                        className={on ? undefined : 'opacity-60'}
-                        onClick={() =>
-                          on
-                            ? location.assign(api.auth.oauthUrl(p, next && next.startsWith('/app') ? next : undefined))
-                            : toast(`${label} : configurez ${p === 'github' ? 'GITHUB_CLIENT_ID et GITHUB_CLIENT_SECRET' : 'GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET'} sur le back-end.`)
-                        }
+                        disabled={!on}
+                        onClick={() => location.assign(api.auth.oauthUrl(p, next && next.startsWith('/app') ? next : undefined))}
                       >
                         {p === 'github' ? <GitHubMark /> : <GoogleMark />} {label}
                       </Button>
                     )
                   })}
-                  {mode === 'signup' && <p className="text-[13px] text-muted-foreground">Avec GitHub ou un compte Gmail, le compte est créé à la première connexion. Seules les adresses vérifiées par le fournisseur sont acceptées.</p>}
+                  {providers.data && (!providers.data.github || !providers.data.google) ? (
+                    <p className="text-[13px] text-muted-foreground">
+                      {!providers.data.github && !providers.data.google ? 'GitHub et Google ne sont pas encore activés' : !providers.data.github ? 'GitHub n’est pas encore activé' : 'Google n’est pas encore activé'} sur ce serveur : renseignez{' '}
+                      {[!providers.data.github && 'GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET', !providers.data.google && 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET'].filter(Boolean).join(' et ')} dans .env, puis redémarrez l’API (README › Inscription et connexion).
+                    </p>
+                  ) : (
+                    mode === 'signup' && <p className="text-[13px] text-muted-foreground">Avec GitHub ou un compte Gmail, le compte est créé à la première connexion. Seules les adresses vérifiées par le fournisseur sont acceptées.</p>
+                  )}
                 </div>
               )}
             </form>
           )}
-          <p className="mt-10 text-[14px] text-muted-foreground">
-            {isDemo ? (
-              <>
-                Mode démo : <Link to="/app" className="font-semibold text-foreground underline underline-offset-4">ouvrez la console</Link> sans compte.
-              </>
-            ) : (
-              <>
-                {signup === 'invite' ? 'Inscription sur invitation : demandez un lien à un administrateur. ' : ''}
-                Comptes de démonstration : abdoul@bonaco.pro (administrateur), ines@bonaco.pro et theo@bonaco.pro (membres).
-              </>
-            )}
-          </p>
+          {providers.data?.demo && mode !== 'reset' && (
+            <section className="mt-10 rounded-lg bg-card p-4" aria-label="Comptes de démonstration">
+              <h2 className="text-[14px] font-semibold">Comptes de démonstration</h2>
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                Mot de passe commun : <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-foreground">{providers.data.demo.password}</code>
+              </p>
+              <ul className="mt-3 grid gap-2">
+                {providers.data.demo.accounts.map((a) => (
+                  <li key={a.email} className="flex items-center justify-between gap-3 text-[13.5px]">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{a.email}</span>
+                      <span className="block text-[12.5px] text-muted-foreground">{a.label}</span>
+                    </span>
+                    <Button type="button" size="sm" variant="outline" disabled={pending} aria-label={`Entrer en tant que ${a.email}`} onClick={() => demoSignIn(a.email, providers.data!.demo!.password)}>
+                      Entrer
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {isDemo && (
+            <p className="mt-6 text-[14px] text-muted-foreground">
+              Mode démo sans back-end : <Link to="/app" className="font-semibold text-foreground underline underline-offset-4">ouvrez la console</Link> directement.
+            </p>
+          )}
         </main>
       </div>
       <div className="relative hidden overflow-hidden bg-ember lg:block" aria-hidden>

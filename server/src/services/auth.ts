@@ -77,6 +77,31 @@ export async function resolvePrincipal(cookieToken: string | undefined, authHead
   return { kind: 'user', id: row.user.id, name: row.user.name, email: row.user.email, platformRole: row.user.platformRole, sessionId: id }
 }
 
+const DEMO_ACCOUNTS = [
+  { email: 'abdoul@bonaco.pro', label: 'Administrateur, propriétaire de 4 agents' },
+  { email: 'ines@bonaco.pro', label: 'Membre, éditrice de 2 agents' },
+  { email: 'theo@bonaco.pro', label: 'Membre, lecteur d’un seul agent' },
+]
+let demoCache: { at: number; value: { password: string; accounts: typeof DEMO_ACCOUNTS } | null } | null = null
+
+/**
+ * Demo accounts shown on the sign-in page (SHOW_DEMO_ACCOUNTS=true), only those whose password is
+ * still SEED_PASSWORD: a changed password is never revealed. Checked at most once a minute.
+ */
+export async function demoAccounts() {
+  const password = config.SEED_PASSWORD
+  if (!config.SHOW_DEMO_ACCOUNTS || !password) return null
+  if (demoCache && Date.now() - demoCache.at < 60_000) return demoCache.value
+  const rows = await db.select().from(s.users).where(sql`lower(${s.users.email}) in (${sql.join(DEMO_ACCOUNTS.map((a) => sql`${a.email}`), sql`, `)})`)
+  const usable = []
+  for (const a of DEMO_ACCOUNTS) {
+    const u = rows.find((r) => r.email.toLowerCase() === a.email)
+    if (u && (await verifyPassword(password, u.passwordHash))) usable.push(a)
+  }
+  demoCache = { at: Date.now(), value: usable.length ? { password, accounts: usable } : null }
+  return demoCache.value
+}
+
 /** Who may create an account right now: the first account always, then according to SIGNUP_MODE. */
 export async function signupState(): Promise<'first' | 'open' | 'invite'> {
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(s.users)

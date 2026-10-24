@@ -85,6 +85,12 @@ const Env = z.object({
    * invited people (and the very first account). The first account is always platform admin.
    */
   SIGNUP_MODE: z.enum(['open', 'invite']).default('open'),
+  /**
+   * Show the demo accounts and their password on the sign-in page, while they still use SEED_PASSWORD.
+   * For local demos only: set to false on any instance reachable by others.
+   */
+  SHOW_DEMO_ACCOUNTS: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  SEED_PASSWORD: z.string().optional(),
   /** GitHub OAuth app (callback: <PUBLIC_URL>/v1/auth/oauth/github/callback). Both set ⇒ enabled. */
   GITHUB_CLIENT_ID: z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),

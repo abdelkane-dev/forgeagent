@@ -13,12 +13,18 @@ const A = (id: string) => `/agents/${encodeURIComponent(id)}`
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}/v1${path}`, {
-    method,
-    credentials: 'include',
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE}/v1${path}`, {
+      method,
+      credentials: 'include',
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch {
+    // Network error, API stopped, or this page's origin missing from CONSOLE_ORIGINS (CORS).
+    throw new ApiError(`API injoignable (${BASE}). Lancez « docker compose up -d » et ouvrez la console sur une origine listée dans CONSOLE_ORIGINS.`, 0)
+  }
   if (res.status === 401 && !path.startsWith('/auth/')) {
     // Session expired or missing: back to the sign-in page, then here.
     const next = location.pathname + location.search

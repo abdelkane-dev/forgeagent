@@ -5,7 +5,7 @@ import { config } from '../config'
 import { route } from '../http/router'
 import { Login, Signup } from '../http/schemas'
 import type { AppEnv } from '../http/types'
-import { acceptInvite, login, logout, me, SESSION_COOKIE, signup, signupState } from '../services/auth'
+import { acceptInvite, demoAccounts, login, logout, me, SESSION_COOKIE, signup, signupState } from '../services/auth'
 import { finishFlow, isEnabled, OAUTH_COOKIE, startFlow } from '../services/oauth'
 
 const User = z.object({ id: z.string(), name: z.string(), email: z.string(), platformRole: z.enum(['admin', 'member']) })
@@ -29,7 +29,7 @@ export function authRoutes(app: Hono<AppEnv>) {
   route(
     app,
     { method: 'get', path: '/auth/providers', tag: 'Auth', summary: 'Moyens de connexion disponibles et état de l’inscription', auth: 'public' },
-    async () => ({ password: true, github: isEnabled('github'), google: isEnabled('google'), signup: await signupState() }),
+    async () => ({ password: true, github: isEnabled('github'), google: isEnabled('google'), signup: await signupState(), demo: await demoAccounts() }),
   )
 
   // OAuth (GitHub, Google). Top-level browser navigations: errors come back to the console's login page.

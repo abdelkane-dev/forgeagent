@@ -403,7 +403,7 @@ export const mockApi: ForgeApi = {
     resetRequest: () => delay(undefined),
     logout: () => delay(undefined, 60),
     // Demo mode has no OAuth app: the buttons explain how to enable them on a real back-end.
-    providers: () => delay({ password: true, github: false, google: false, signup: 'open' as const }, 60),
+    providers: () => delay({ password: true, github: false, google: false, signup: 'open' as const, demo: { password: 'n’importe lequel', accounts: db.users.map((u) => ({ email: u.email, label: u.platformRole === 'admin' ? 'Administrateur' : 'Membre' })) } }, 60),
     oauthUrl: () => '/login?error=' + encodeURIComponent('Mode démo : configurez GitHub ou Google sur le back-end'),
   },
 

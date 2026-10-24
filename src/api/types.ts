@@ -21,6 +21,8 @@ export interface AuthProviders {
   github: boolean
   google: boolean
   signup: 'first' | 'open' | 'invite'
+  /** Demo accounts still using the seed password (local demos only). */
+  demo?: { password: string; accounts: { email: string; label: string }[] } | null
 }
 
 export interface User {
