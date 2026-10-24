@@ -1,5 +1,5 @@
 # Build context: repository root (the server shares src/api/types.ts and the demo seed with the console).
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /app/server
 COPY server/package.json server/package-lock.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY src/api /app/src/api
 COPY server/ ./
 RUN npm run build && npm prune --omit=dev
 
-FROM node:22-alpine
+FROM node:25-alpine
 ENV NODE_ENV=production
 WORKDIR /app/server
 RUN addgroup -S forge && adduser -S forge -G forge
