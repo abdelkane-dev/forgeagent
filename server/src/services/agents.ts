@@ -1,21 +1,35 @@
-import { and, eq, gte, inArray, sql } from 'drizzle-orm'
-import type { Agent, AgentDraft, AgentMetrics, Role } from '@shared/types'
-import { db, schema as s } from '../db/client'
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
+import type { Agent, AgentDraft, AgentMetrics, AgentRole, AgentStatus } from '@shared/types'
+import { schema as s, type Tx } from '../db/client'
 import { isKnownAction, isSensitive } from '../domain/actions'
-import { audit } from '../lib/audit'
+import { audit, type ActorType } from '../lib/audit'
 import { newId } from '../lib/crypto'
-import { badRequest, forbidden, notFound } from '../lib/errors'
-import { can } from '../http/permissions'
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors'
+import { generateDoc } from './docs'
 
 type AgentRow = typeof s.agents.$inferSelect
+export interface Actor {
+  id: string
+  name: string
+  /** Role on this agent (owner for a creator). */
+  role: AgentRole
+  type?: ActorType
+}
 
 const EMPTY: AgentMetrics = { runs24h: 0, successRate: 100, costToday: 0, p50LatencyMs: 0, tokens24h: 0 }
+const RANK: Record<AgentRole, number> = { viewer: 0, editor: 1, owner: 2 }
+export const atLeast = (role: AgentRole | null | undefined, min: AgentRole) => !!role && RANK[role] >= RANK[min]
 
-/** Metrics over the last 24 hours, computed from runs. */
-async function metricsFor(ids: string[]) {
+/** The caller's role on an agent, read inside its isolated context (null = not a member). */
+export async function memberRole(tx: Tx, agentId: string, userId: string): Promise<AgentRole | null> {
+  const [m] = await tx.select({ role: s.agentMembers.role }).from(s.agentMembers).where(and(eq(s.agentMembers.agentId, agentId), eq(s.agentMembers.userId, userId)))
+  return m?.role ?? null
+}
+
+async function metricsFor(tx: Tx, ids: string[]) {
   if (!ids.length) return new Map<string, AgentMetrics>()
   const since = new Date(Date.now() - 86_400_000).toISOString()
-  const rows = await db
+  const rows = await tx
     .select({
       agentId: s.runs.agentId,
       runs: sql<number>`count(*)::int`,
@@ -25,7 +39,7 @@ async function metricsFor(ids: string[]) {
       p50: sql<number>`coalesce(percentile_cont(0.5) within group (order by ${s.runs.durationMs}), 0)::int`,
     })
     .from(s.runs)
-    .where(and(inArray(s.runs.agentId, ids), gte(s.runs.startedAt, since), eq(s.runs.sandbox, false)))
+    .where(and(inArray(s.runs.agentId, ids), gte(s.runs.startedAt, since), eq(s.runs.environment, 'production')))
     .groupBy(s.runs.agentId)
   return new Map(
     rows.map((r) => [
@@ -35,157 +49,204 @@ async function metricsFor(ids: string[]) {
   )
 }
 
-/** Assembles front-end `Agent` objects from the normalized tables, in a fixed number of queries. */
-export async function hydrate(rows: AgentRow[]): Promise<Agent[]> {
+/** Assembles front-end `Agent` objects. Every query runs in the caller's context: RLS filters it. */
+export async function hydrate(tx: Tx, rows: AgentRow[], userId?: string): Promise<Agent[]> {
   if (!rows.length) return []
   const ids = rows.map((r) => r.id)
-  const [projectLinks, skillLinks, versions, sites, metrics] = await Promise.all([
-    db.select().from(s.agentProjects).where(inArray(s.agentProjects.agentId, ids)),
-    db.select().from(s.agentSkills).where(inArray(s.agentSkills.agentId, ids)),
-    db.select({ agentId: s.agentVersions.agentId, version: s.agentVersions.version, note: s.agentVersions.note, author: s.agentVersions.author, createdAt: s.agentVersions.createdAt }).from(s.agentVersions).where(inArray(s.agentVersions.agentId, ids)),
-    db.select().from(s.integrations).where(inArray(s.integrations.agentId, ids)),
-    metricsFor(ids),
+  const [projectLinks, skillLinks, versions, metrics, mine] = await Promise.all([
+    tx.select().from(s.agentProjects).where(inArray(s.agentProjects.agentId, ids)),
+    tx.select().from(s.agentSkills).where(inArray(s.agentSkills.agentId, ids)),
+    tx
+      .select({ agentId: s.agentVersions.agentId, version: s.agentVersions.version, note: s.agentVersions.note, author: s.agentVersions.author, createdAt: s.agentVersions.createdAt, regressionScore: s.agentVersions.regressionScore })
+      .from(s.agentVersions)
+      .where(inArray(s.agentVersions.agentId, ids)),
+    metricsFor(tx, ids),
+    userId ? tx.select().from(s.agentMembers).where(and(inArray(s.agentMembers.agentId, ids), eq(s.agentMembers.userId, userId))) : Promise.resolve([]),
   ])
   return rows.map((r) => {
-    const site = sites.find((x) => x.agentId === r.id)
-    const { createdBy: _c, ...rest } = r
+    const { createdBy: _c, allowedActions, ...rest } = r
     return {
       ...rest,
+      permissions: { allowedActions },
       projectIds: projectLinks.filter((l) => l.agentId === r.id).map((l) => l.projectId),
       skillIds: skillLinks.filter((l) => l.agentId === r.id).map((l) => l.skillId),
       versions: versions
         .filter((v) => v.agentId === r.id)
         .sort((a, b) => b.version - a.version)
         .map(({ agentId: _a, ...v }) => v),
-      externalSite: site ? { url: site.url, status: site.status, lastPingAt: site.lastPingAt, latencyMs: site.latencyMs, allowedOrigins: site.allowedOrigins } : null,
       metrics: metrics.get(r.id) ?? EMPTY,
+      myRole: mine.find((m) => m.agentId === r.id)?.role ?? 'viewer',
     }
   })
 }
 
-export async function listAgents() {
-  return hydrate(await db.select().from(s.agents).orderBy(sql`${s.agents.updatedAt} desc`))
+/** Agents of the caller. RLS returns only the agents they are a member of. */
+export async function listAgents(tx: Tx, userId: string) {
+  return hydrate(tx, await tx.select().from(s.agents).orderBy(desc(s.agents.updatedAt)), userId)
 }
 
-export async function getAgentRow(id: string) {
-  const [row] = await db.select().from(s.agents).where(eq(s.agents.id, id))
+export async function getAgentRow(tx: Tx, id: string) {
+  const [row] = await tx.select().from(s.agents).where(eq(s.agents.id, id))
   if (!row) throw notFound('Agent')
   return row
 }
 
-export async function getAgent(id: string) {
-  return (await hydrate([await getAgentRow(id)]))[0]
+export async function getAgent(tx: Tx, id: string, userId?: string) {
+  return (await hydrate(tx, [await getAgentRow(tx, id)], userId))[0]
 }
 
 /**
- * Permission ceiling, enforced in code: only catalogue actions, never a forbidden one,
- * and only admins may grant sensitive actions. An agent can never hold more than this.
+ * Grant ceiling, enforced in code (on top of RLS): catalogue actions only, never a forbidden one,
+ * and only an agent owner may grant a sensitive action.
  */
-export function assertGrantable(actions: string[], forbiddenList: string[], role: Role) {
+export function assertGrantable(actions: string[], forbiddenList: string[], role: AgentRole) {
   for (const a of actions) {
     if (!isKnownAction(a)) throw badRequest(`Action inconnue : ${a}`)
     if (forbiddenList.includes(a)) throw badRequest(`Action à la fois autorisée et interdite : ${a}`)
-    if (isSensitive(a) && !can(role, 'sensitive.grant')) throw forbidden(`Seul un administrateur peut accorder l’action sensible « ${a} »`)
+    if (isSensitive(a) && role !== 'owner') throw forbidden(`Seul le propriétaire de l’agent peut accorder l’action sensible « ${a} »`)
   }
 }
 
-async function assertRefs(projectIds: string[] | undefined, skillIds: string[] | undefined, connectorIds: string[] | undefined) {
+async function assertRefs(tx: Tx, projectIds?: string[], skillIds?: string[], connectorIds?: string[]) {
   if (projectIds?.length) {
-    const found = await db.select({ id: s.projects.id }).from(s.projects).where(inArray(s.projects.id, projectIds))
+    const found = await tx.select({ id: s.projects.id }).from(s.projects).where(inArray(s.projects.id, projectIds))
     if (found.length !== new Set(projectIds).size) throw badRequest('Projet inconnu')
   }
   if (skillIds?.length) {
-    const found = await db.select({ id: s.skills.id }).from(s.skills).where(inArray(s.skills.id, skillIds))
+    const found = await tx.select({ id: s.skills.id }).from(s.skills).where(inArray(s.skills.id, skillIds))
     if (found.length !== new Set(skillIds).size) throw badRequest('Skill inconnue')
   }
   if (connectorIds?.length) {
-    const found = await db.select({ id: s.connectors.id }).from(s.connectors).where(inArray(s.connectors.id, connectorIds))
+    const found = await tx.select({ id: s.connectors.id }).from(s.connectors).where(inArray(s.connectors.id, connectorIds))
     if (found.length !== new Set(connectorIds).size) throw badRequest('Connecteur inconnu')
   }
 }
 
-const snapshotOf = (a: Agent) => {
-  const { metrics: _m, versions: _v, externalSite: _e, ...rest } = a
-  return rest as unknown as Record<string, unknown>
+const CONFIG_KEYS = ['name', 'mission', 'role', 'type', 'subcategory', 'autonomy', 'model', 'tone', 'language', 'persona', 'triggers', 'tools', 'capabilities', 'integrations', 'guardrails', 'costCapPerDay', 'monthlyBudget', 'allowedOrigins', 'memory'] as const
+
+export function snapshotOf(a: Agent) {
+  const snap: Record<string, unknown> = { allowedActions: a.permissions.allowedActions, projectIds: a.projectIds, skillIds: a.skillIds }
+  for (const k of CONFIG_KEYS) snap[k] = a[k]
+  return snap
 }
 
-export async function createAgent(draft: AgentDraft, actor: { id: string; name: string; role: Role }, opts: { actorType?: 'user' | 'team' } = {}) {
-  assertGrantable(draft.permissions.allowedActions, draft.guardrails.forbiddenActions, actor.role)
-  await assertRefs(draft.projectIds, draft.skillIds, draft.tools.map((t) => t.connectorId))
+/** Creates an agent and makes the creator its owner, in one transaction (RLS: the creator claims it). */
+export async function createAgent(tx: Tx, draft: AgentDraft, actor: { id: string; name: string }, opts: { status?: AgentStatus } = {}) {
+  assertGrantable(draft.permissions.allowedActions, draft.guardrails.forbiddenActions, 'owner')
+  await assertRefs(tx, draft.projectIds, draft.skillIds, draft.tools.map((t) => t.connectorId))
   const id = newId('agt')
-  const { projectIds, skillIds, ...row } = draft
-  await db.transaction(async (tx) => {
-    await tx.insert(s.agents).values({ ...row, id, status: 'active', version: 1, createdBy: opts.actorType === 'team' ? null : actor.id })
-    if (projectIds.length) await tx.insert(s.agentProjects).values([...new Set(projectIds)].map((projectId) => ({ agentId: id, projectId })))
-    if (skillIds.length) await tx.insert(s.agentSkills).values([...new Set(skillIds)].map((skillId) => ({ agentId: id, skillId })))
-    await tx.insert(s.agentVersions).values({ agentId: id, version: 1, note: 'Création', author: actor.name, snapshot: { ...row, projectIds, skillIds } })
-  })
-  await audit(actor.name, opts.actorType ?? 'user', 'a créé l’agent', draft.name, { agentId: id })
-  return getAgent(id)
+  const { projectIds, skillIds, permissions, members, ...row } = draft
+  // No RETURNING: the row only becomes visible once the owner membership exists.
+  await tx.insert(s.agents).values({ ...row, id, allowedActions: permissions.allowedActions, status: opts.status ?? 'validated', version: 1, createdBy: actor.id })
+  await tx.insert(s.agentMembers).values({ agentId: id, userId: actor.id, role: 'owner' })
+  for (const m of members ?? []) {
+    const [u] = await tx.select({ id: s.users.id }).from(s.users).where(sql`lower(${s.users.email}) = ${m.email.toLowerCase()}`)
+    if (u && u.id !== actor.id) await tx.insert(s.agentMembers).values({ agentId: id, userId: u.id, role: m.role === 'owner' ? 'editor' : m.role }).onConflictDoNothing()
+  }
+  if (projectIds.length) await tx.insert(s.agentProjects).values([...new Set(projectIds)].map((projectId) => ({ agentId: id, projectId })))
+  if (skillIds.length) await tx.insert(s.agentSkills).values([...new Set(skillIds)].map((skillId) => ({ agentId: id, skillId })))
+  const agent = await getAgent(tx, id, actor.id)
+  await tx.insert(s.agentVersions).values({ agentId: id, version: 1, note: 'Création', author: actor.name, snapshot: snapshotOf(agent) })
+  await generateDoc(tx, id)
+  await audit(tx, id, { actor: actor.name, actorType: 'user', action: 'a créé l’agent', target: draft.name })
+  return getAgent(tx, id, actor.id)
 }
 
-type Patch = Partial<AgentDraft> & { status?: Agent['status']; versionNote?: string }
+export type Patch = Partial<AgentDraft> & { versionNote?: string; regressionScore?: number | null }
 
-export async function updateAgent(id: string, patch: Patch, actor: { id: string; name: string; role: Role }) {
-  const current = await getAgent(id)
-  const { versionNote, projectIds, skillIds, ...fields } = patch
-  if (fields.permissions || fields.guardrails) {
-    // Only newly added actions are checked against the actor's role: keeping an existing grant is fine.
-    const added = (fields.permissions?.allowedActions ?? []).filter((a) => !current.permissions.allowedActions.includes(a))
-    assertGrantable(added, (fields.guardrails ?? current.guardrails).forbiddenActions, actor.role)
-    const all = fields.permissions?.allowedActions ?? current.permissions.allowedActions
-    const forbiddenList = (fields.guardrails ?? current.guardrails).forbiddenActions
-    if (all.some((a) => forbiddenList.includes(a))) throw badRequest('Une action ne peut pas être à la fois autorisée et interdite')
+export async function updateAgent(tx: Tx, id: string, patch: Patch, actor: Actor) {
+  const current = await getAgent(tx, id, actor.id)
+  const { versionNote, regressionScore, projectIds, skillIds, permissions, members: _m, ...fields } = patch
+  const forbiddenList = (fields.guardrails ?? current.guardrails).forbiddenActions
+  if (permissions) {
+    // Only newly granted actions are checked against the actor's role: keeping an existing grant is fine.
+    const added = permissions.allowedActions.filter((a) => !current.permissions.allowedActions.includes(a))
+    assertGrantable(added, forbiddenList, actor.role)
   }
-  await assertRefs(projectIds, skillIds, fields.tools?.map((t) => t.connectorId))
+  const all = permissions?.allowedActions ?? current.permissions.allowedActions
+  if (all.some((a) => forbiddenList.includes(a))) throw badRequest('Une action ne peut pas être à la fois autorisée et interdite')
+  await assertRefs(tx, projectIds, skillIds, fields.tools?.map((t) => t.connectorId))
   const bump = versionNote !== undefined
-  await db.transaction(async (tx) => {
-    if (Object.keys(fields).length || bump)
-      await tx
-        .update(s.agents)
-        .set({ ...fields, updatedAt: new Date().toISOString(), ...(bump ? { version: current.version + 1 } : {}) })
-        .where(eq(s.agents.id, id))
-    if (projectIds) {
-      await tx.delete(s.agentProjects).where(eq(s.agentProjects.agentId, id))
-      if (projectIds.length) await tx.insert(s.agentProjects).values([...new Set(projectIds)].map((projectId) => ({ agentId: id, projectId })))
-    }
-    if (skillIds) {
-      await tx.delete(s.agentSkills).where(eq(s.agentSkills.agentId, id))
-      if (skillIds.length) await tx.insert(s.agentSkills).values([...new Set(skillIds)].map((skillId) => ({ agentId: id, skillId })))
-    }
-  })
-  const next = await getAgent(id)
-  if (bump) {
-    await db.insert(s.agentVersions).values({ agentId: id, version: next.version, note: versionNote || 'Mise à jour', author: actor.name, snapshot: snapshotOf(next) })
-    await audit(actor.name, 'user', `a publié la v${next.version}`, next.name)
-    return getAgent(id)
+  await tx
+    .update(s.agents)
+    .set({ ...fields, ...(permissions ? { allowedActions: permissions.allowedActions } : {}), updatedAt: new Date().toISOString(), ...(bump ? { version: current.version + 1 } : {}) })
+    .where(eq(s.agents.id, id))
+  if (projectIds) {
+    await tx.delete(s.agentProjects).where(eq(s.agentProjects.agentId, id))
+    if (projectIds.length) await tx.insert(s.agentProjects).values([...new Set(projectIds)].map((projectId) => ({ agentId: id, projectId })))
   }
-  if (fields.status && fields.status !== current.status) await audit(actor.name, 'user', fields.status === 'active' ? 'a activé' : 'a mis en pause', next.name)
+  if (skillIds) {
+    await tx.delete(s.agentSkills).where(eq(s.agentSkills.agentId, id))
+    if (skillIds.length) await tx.insert(s.agentSkills).values([...new Set(skillIds)].map((skillId) => ({ agentId: id, skillId })))
+  }
+  const next = await getAgent(tx, id, actor.id)
+  if (bump) {
+    await tx.insert(s.agentVersions).values({ agentId: id, version: next.version, note: versionNote || 'Mise à jour', author: actor.name, snapshot: snapshotOf(next), regressionScore: regressionScore ?? null })
+    await generateDoc(tx, id)
+    await audit(tx, id, { actor: actor.name, actorType: actor.type ?? 'user', action: `a publié la v${next.version}`, target: next.name, meta: regressionScore != null ? { regressionScore } : undefined })
+    return getAgent(tx, id, actor.id)
+  }
+  await audit(tx, id, { actor: actor.name, actorType: actor.type ?? 'user', action: 'a modifié la configuration', target: Object.keys(fields).join(', ') || 'liens' })
   return next
 }
 
-export async function removeAgent(id: string, actor: { name: string }) {
-  const a = await getAgentRow(id)
-  await db.delete(s.agents).where(eq(s.agents.id, id))
-  await audit(actor.name, 'user', 'a supprimé l’agent', a.name, { agentId: id })
+/** Allowed user transitions. starting/validated/error are set by tests and the runtime. */
+const USER_TRANSITIONS: Partial<Record<AgentStatus, AgentStatus[]>> = {
+  active: ['validated', 'inactive', 'active'],
+  inactive: ['validated', 'active', 'error', 'inactive', 'starting'],
+}
+
+export async function setStatus(tx: Tx, id: string, status: AgentStatus, actor: Actor) {
+  const a = await getAgentRow(tx, id)
+  if (!USER_TRANSITIONS[status]?.includes(a.status)) throw conflict(a.status === 'error' ? 'Agent en erreur : relancez les tests pour le valider avant de l’activer' : `Transition impossible : ${a.status} → ${status}`)
+  await tx.update(s.agents).set({ status, updatedAt: new Date().toISOString() }).where(eq(s.agents.id, id))
+  await audit(tx, id, { actor: actor.name, actorType: 'user', action: status === 'active' ? 'a activé l’agent' : 'a mis l’agent en pause', target: a.name })
+  return getAgent(tx, id, actor.id)
+}
+
+/** Status changes decided by the platform itself (tests passed, run failed…). */
+export async function setSystemStatus(tx: Tx, id: string, status: AgentStatus, reason: string) {
+  await tx.update(s.agents).set({ status, updatedAt: new Date().toISOString() }).where(eq(s.agents.id, id))
+  await audit(tx, id, { actor: 'ForgeAgent', actorType: 'system', action: `statut → ${status}`, target: reason })
 }
 
 /** Restoring creates a new version with the old snapshot: nothing is ever lost. */
-export async function restoreVersion(id: string, version: number, actor: { id: string; name: string; role: Role }) {
-  const [v] = await db.select().from(s.agentVersions).where(and(eq(s.agentVersions.agentId, id), eq(s.agentVersions.version, version)))
+export async function restoreVersion(tx: Tx, id: string, version: number, actor: Actor) {
+  const [v] = await tx.select().from(s.agentVersions).where(and(eq(s.agentVersions.agentId, id), eq(s.agentVersions.version, version)))
   if (!v) throw notFound('Version')
-  const snap = v.snapshot as Partial<Agent>
-  const keys = ['name', 'mission', 'role', 'type', 'subcategory', 'autonomy', 'model', 'tone', 'language', 'persona', 'triggers', 'tools', 'capabilities', 'integrations', 'permissions', 'guardrails', 'costCapPerDay', 'memory', 'projectIds', 'skillIds'] as const
-  const patch: Patch = {}
-  for (const k of keys) if (snap[k] !== undefined) (patch as Record<string, unknown>)[k] = snap[k]
-  // Restoring re-checks the grant: an editor cannot restore a version an admin had widened.
-  return updateAgent(id, { ...patch, versionNote: `Restauration de la v${version}` }, actor)
+  const snap = v.snapshot as Record<string, unknown>
+  const patch: Record<string, unknown> = {}
+  for (const k of [...CONFIG_KEYS, 'projectIds', 'skillIds']) if (snap[k] !== undefined) patch[k] = snap[k]
+  if (snap.allowedActions) patch.permissions = { allowedActions: snap.allowedActions }
+  return updateAgent(tx, id, { ...(patch as Patch), versionNote: `Restauration de la v${version}` }, actor)
 }
 
-export async function duplicateAgent(id: string, projectId: string, actor: { id: string; name: string; role: Role }) {
-  const src = await getAgent(id)
-  const { id: _i, status: _s, version: _v, versions: _vs, metrics: _m, externalSite: _e, createdAt: _c, updatedAt: _u, ...draft } = src
-  const copy = await createAgent({ ...draft, name: `${src.name} (copie)`.slice(0, 80), projectIds: [projectId] }, actor)
-  await db.update(s.agents).set({ status: 'paused' }).where(eq(s.agents.id, copy.id))
-  return getAgent(copy.id)
+/** Copies the configuration only: knowledge, memory, secrets, keys and logs stay with the source agent. */
+export async function duplicateAgent(tx: Tx, id: string, actor: Actor) {
+  const src = await getAgent(tx, id, actor.id)
+  const draft: AgentDraft = {
+    name: `${src.name} (copie)`.slice(0, 80),
+    mission: src.mission,
+    role: src.role,
+    type: src.type,
+    subcategory: src.subcategory,
+    autonomy: src.autonomy,
+    model: src.model,
+    tone: src.tone,
+    language: src.language,
+    persona: src.persona,
+    projectIds: src.projectIds,
+    triggers: src.triggers,
+    tools: src.tools,
+    capabilities: src.capabilities,
+    skillIds: src.skillIds,
+    integrations: src.integrations,
+    permissions: { allowedActions: actor.role === 'owner' ? src.permissions.allowedActions : src.permissions.allowedActions.filter((a) => !isSensitive(a)) },
+    guardrails: src.guardrails,
+    costCapPerDay: src.costCapPerDay,
+    monthlyBudget: src.monthlyBudget,
+    allowedOrigins: [],
+    memory: src.memory,
+  }
+  return createAgent(tx, draft, actor, { status: 'inactive' })
 }

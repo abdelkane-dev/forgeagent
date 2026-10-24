@@ -1,15 +1,18 @@
 import { cn } from '@/lib/utils'
 
-/**
- * ForgeAgent mark: the forge ingot (pointy-top hexagon) with an F whose
- * middle bar ends in a node, the agent plugged into the system.
- */
+/** ForgeAgent mark: an anvil struck by a hammer, with one spark (FORGE_THEME §7). */
 export function LogoMark({ className, title = 'ForgeAgent' }: { className?: string; title?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={cn('size-7 shrink-0', className)} role="img" aria-label={title}>
-      <path d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75Z" fill="var(--cobalt)" />
-      <path d="M11.5 22.5v-13h9.5M11.5 16h6" fill="none" stroke="var(--cobalt-ink)" strokeWidth="3" strokeLinecap="square" />
-      <circle cx="21.2" cy="16" r="2.1" fill="var(--cobalt-ink)" />
+      <path
+        d="M3.5 15.5h19.5l5-2.5v3.6l-4.4 2.4H18l-1.4 3.6H21v3.4H8.6V22.6h4.2L11.6 19H7.2c-2 0-3.7-1.6-3.7-3.5Z"
+        fill="var(--ember)"
+      />
+      <g transform="rotate(-38 21 8)" fill="var(--foreground)">
+        <rect x="15.5" y="3" width="11" height="5" rx="1.2" />
+        <rect x="20" y="8" width="2.2" height="9" rx="1.1" />
+      </g>
+      <path d="m9 9 .9 2.1L12 12l-2.1.9L9 15l-.9-2.1L6 12l2.1-.9Z" fill="var(--amber)" />
     </svg>
   )
 }

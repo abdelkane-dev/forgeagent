@@ -67,7 +67,7 @@ export default function Evals() {
                         <span className="text-[14px] text-muted-foreground">—</span>
                       ) : (
                         <>
-                          <Meter value={e.lastScore} max={100} tone={e.lastScore >= 95 ? 'cobalt' : 'warn'} className="flex-1" />
+                          <Meter value={e.lastScore} max={100} tone={e.lastScore >= 95 ? 'ember' : 'warn'} className="flex-1" />
                           <span className={cn('w-14 text-right text-[15px] font-semibold tabular', e.lastScore < 95 && 'text-warn')}>{e.lastScore} %</span>
                         </>
                       )}
@@ -104,7 +104,7 @@ export default function Evals() {
                       <span className={current ? 'font-semibold' : 'text-muted-foreground'}>{v}</span>
                       <span className="font-semibold tabular">{score} %</span>
                     </div>
-                    <Meter value={score as number} max={100} tone={current ? 'cobalt' : undefined} className={current ? '' : '[&>div]:bg-muted-foreground'} />
+                    <Meter value={score as number} max={100} tone={current ? 'ember' : undefined} className={current ? '' : '[&>div]:bg-muted-foreground'} />
                   </div>
                 ))}
                 <p className="text-[13.5px] text-muted-foreground">La v{agent.version} gagne 5 points, surtout sur les cas limites et l’injection de prompt.</p>

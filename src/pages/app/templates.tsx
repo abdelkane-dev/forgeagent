@@ -10,7 +10,7 @@ import { Async, CardsSkeleton } from '@/components/common/states'
 import { Tag } from '@/components/common/status'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { AGENT_TYPE_ORDER, AGENT_TYPES } from '@/lib/labels'
+import { AGENT_TYPE_ORDER, AGENT_TYPES } from '@/labels'
 
 export default function Templates() {
   const templates = useTemplates()

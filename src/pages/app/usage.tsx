@@ -11,7 +11,7 @@ import { Async } from '@/components/common/states'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { compact, usd } from '@/lib/format'
-import { MODELS } from '@/lib/labels'
+import { MODELS } from '@/labels'
 
 const MONTH_SPEND = 312.4
 

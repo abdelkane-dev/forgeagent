@@ -4,10 +4,15 @@ import type { Capabilities } from './capabilities'
 
 export type { TeamRole }
 
-/** What a specialist receives: only the capabilities its role grants, plus accounting hooks. */
+/**
+ * What a specialist receives: the capabilities of its role only, bound to ONE target agent
+ * by a signed, short-lived capability token. It cannot name another agent.
+ */
 export interface TeamContext<R extends TeamRole = TeamRole> {
   requestId: string
   taskId: string
+  /** The single agent this task works on. */
+  agentId: string
   role: R
   caps: Pick<Capabilities, (typeof ROLE_CAPABILITIES)[R][number]>
   /** Calls the role's model with its prompt.md and validates the JSON answer. */
@@ -17,22 +22,18 @@ export interface TeamContext<R extends TeamRole = TeamRole> {
 
 export interface TeamAgent<R extends TeamRole, I, O> {
   role: R
-  label: string
   mission: string
   input: z.ZodType<I>
   output: z.ZodType<O>
   run(ctx: TeamContext<R>, input: I): Promise<O>
 }
 
-/**
- * Least privilege, enforced by construction: a role's context only contains the functions listed here.
- * The orchestrator cannot write anything; only the builder can create an agent; only the tester can run one.
- */
+/** Least privilege, enforced by construction: a role's context only contains these functions. */
 export const ROLE_CAPABILITIES = {
   orchestrator: ['readRequest'],
   architect: ['readCatalog', 'readProject'],
-  builder: ['readCatalog', 'createAgentFromPlan'],
+  builder: ['readCatalog', 'configureAgentFromPlan'],
   security: ['readCatalog'],
-  tester: ['runChecks', 'runSandbox'],
+  tester: ['runChecks', 'runSandbox', 'runEvaluation'],
   supervisor: ['readAgentHealth', 'readRecentErrors', 'notify'],
 } as const satisfies Record<TeamRole, readonly (keyof Capabilities)[]>

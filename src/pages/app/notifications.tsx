@@ -41,7 +41,7 @@ export default function Notifications() {
                     }}
                     className={cn('flex w-full items-center gap-4 rounded-lg px-4 py-3.5 text-left transition-colors hover:bg-card', !n.read && 'bg-card')}
                   >
-                    <span className={cn('hex size-2.5 shrink-0', n.read ? 'bg-transparent' : 'bg-cobalt')} aria-label={n.read ? undefined : 'Non lue'} />
+                    <span className={cn('hex size-2.5 shrink-0', n.read ? 'bg-transparent' : 'bg-ember')} aria-label={n.read ? undefined : 'Non lue'} />
                     <span className="min-w-0 flex-1">
                       <span className={cn('block text-[14.5px]', !n.read && 'font-semibold')}>{n.title}</span>
                       <span className="block text-[13px] text-muted-foreground">

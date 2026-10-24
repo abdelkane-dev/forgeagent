@@ -14,7 +14,6 @@ const Output = z.object({ next: Next, instructions: z.string().max(300).default(
 /** Decides the next step. Its choice is only a suggestion: the engine enforces the allowed transitions. */
 export const orchestrator: TeamAgent<'orchestrator', z.infer<typeof Input>, z.infer<typeof Output>> = {
   role: 'orchestrator',
-  label: 'Orchestrateur',
   mission: 'Découpe chaque demande en tâches, les assigne aux spécialistes et assemble les résultats.',
   input: Input,
   output: Output,

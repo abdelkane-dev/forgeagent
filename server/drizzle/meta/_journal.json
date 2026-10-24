@@ -5,22 +5,22 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1792822675616,
-      "tag": "0000_init",
+      "when": 1792828171386,
+      "tag": "0000_extensions",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1792822682535,
-      "tag": "0001_audit_append_only",
+      "when": 1792828179753,
+      "tag": "0001_schema",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1792824490068,
-      "tag": "0002_knowledge_content",
+      "when": 1792828188198,
+      "tag": "0002_isolation",
       "breakpoints": true
     }
   ]

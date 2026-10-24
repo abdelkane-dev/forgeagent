@@ -1,41 +1,11 @@
-import { eq } from 'drizzle-orm'
-import { db, schema as s } from '../db/client'
+import { and, eq } from 'drizzle-orm'
+import { asAgent, db, schema as s } from '../db/client'
 import { logger } from '../lib/logger'
 import { queue } from '../queue'
+import { indexDoc } from '../services/knowledge'
+import { startWorkflow, startWorkflowWorker } from '../services/workflows'
 import { runAgent } from './run-agent'
-import { safeGet } from './site'
-
-/* ---------- Knowledge indexing ---------- */
-
-const stripHtml = (html: string) =>
-  html
-    .replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-async function indexDoc(docId: string) {
-  const [doc] = await db.select().from(s.knowledgeDocs).where(eq(s.knowledgeDocs.id, docId))
-  if (!doc) return
-  try {
-    let text = doc.content ?? ''
-    if (doc.kind === 'website') {
-      const res = await safeGet(doc.name, 10_000)
-      if (res.status >= 400) throw new Error(`HTTP ${res.status}`)
-      text = stripHtml(res.body)
-    } else if (!text) {
-      throw new Error('Extraction non disponible pour ce format : importez du texte ou du Markdown')
-    }
-    const chunks = Math.max(1, Math.ceil(text.length / 1500))
-    await db
-      .update(s.knowledgeDocs)
-      .set({ status: 'indexed', content: text.slice(0, 500_000), chunks, size: `${Math.max(1, Math.round(text.length / 1024))} Ko`, error: null })
-      .where(eq(s.knowledgeDocs.id, docId))
-  } catch (e) {
-    await db.update(s.knowledgeDocs).set({ status: 'failed', error: (e as Error).message.slice(0, 300), size: '—' }).where(eq(s.knowledgeDocs.id, docId))
-  }
-}
+import { sql } from 'drizzle-orm'
 
 /* ---------- Cron (5 fields, local time) ---------- */
 
@@ -62,20 +32,31 @@ export function cronMatches(cron: string, d: Date) {
   return field(f[0], d.getMinutes(), 0, 59) && field(f[1], d.getHours(), 0, 23) && field(f[2], d.getDate(), 1, 31) && field(f[3], d.getMonth() + 1, 1, 12) && (field(f[4], dow, 0, 7) || (dow === 0 && field(f[4], 7, 0, 7)))
 }
 
+/** Ids of agents in given states (SECURITY DEFINER lookup: ids only, no data). */
+export async function agentIds(states: string[]) {
+  const r = await db.execute(sql`select forge_agent_ids(${sql.raw(`ARRAY[${states.map((x) => `'${x.replace(/[^a-z]/g, '')}'`).join(',')}]`)}) as id`)
+  const rows = ((r as unknown as { rows?: { id: string }[] }).rows ?? (r as unknown as { id: string }[])) as { id: string }[]
+  return rows.map((x) => x.id)
+}
+
+/** Each agent is visited in its own context: one agent's schedule never reads another's. */
 async function tick(at: Date) {
-  const [schedules, agents] = await Promise.all([db.select().from(s.schedules).where(eq(s.schedules.enabled, true)), db.select().from(s.agents).where(eq(s.agents.status, 'active'))])
-  const due = new Map<string, string>()
-  for (const sc of schedules) if (cronMatches(sc.cron, at)) due.set(sc.agentId, sc.label)
-  for (const a of agents) for (const t of a.triggers) if (t.enabled && t.kind === 'cron' && cronMatches(t.config, at)) due.set(a.id, t.label)
-  for (const [agentId, label] of due) {
-    if (!agents.some((a) => a.id === agentId)) continue
-    // One job per agent and minute: several API processes never double-run a schedule.
-    await queue.add('agents.run', 'scheduled', { agentId, input: `Déclenchement planifié : ${label}` }, { jobId: `cron:${agentId}:${Math.floor(at.getTime() / 60_000)}` })
+  const minute = Math.floor(at.getTime() / 60_000)
+  for (const agentId of await agentIds(['active'])) {
+    const { triggers, workflows } = await asAgent(agentId, async (tx) => ({
+      triggers: (await tx.select({ triggers: s.agents.triggers }).from(s.agents).where(eq(s.agents.id, agentId)))[0]?.triggers ?? [],
+      workflows: await tx.select().from(s.workflows).where(and(eq(s.workflows.agentId, agentId), eq(s.workflows.published, true))),
+    }))
+    for (const t of triggers)
+      if (t.enabled && t.kind === 'cron' && cronMatches(t.config, at))
+        await queue.add('agents.run', 'scheduled', { agentId, input: `Déclenchement planifié : ${t.label}` }, { jobId: `agent:${agentId}:cron:${t.id}:${minute}` })
+    for (const w of workflows)
+      if (w.trigger.kind === 'cron' && cronMatches(w.trigger.config, at)) await startWorkflow(agentId, w.id, 'cron', 'Déclenchement planifié', { test: false, actor: 'Planificateur' })
   }
 }
 
 export function startBackgroundJobs() {
-  queue.process('knowledge.index', async (d) => indexDoc(String(d.docId)), 2)
+  queue.process('knowledge.index', async (d) => indexDoc(String(d.agentId), String(d.docId), (d.content as string | null) ?? null), 2)
   queue.process(
     'agents.run',
     async (d) => {
@@ -83,6 +64,7 @@ export function startBackgroundJobs() {
     },
     4,
   )
+  startWorkflowWorker()
   queue.process('scheduler.tick', async () => tick(new Date()), 1)
   void queue.every('scheduler.tick', 'tick', 60_000)
 }

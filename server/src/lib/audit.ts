@@ -1,12 +1,20 @@
-import { db, schema as s } from '../db/client'
-import type { Principal } from '../http/types'
+import { db, schema as s, type Tx } from '../db/client'
 
-type ActorType = 'user' | 'agent' | 'team' | 'system'
+export type ActorType = 'user' | 'agent' | 'team' | 'system' | 'platform'
 
-/** Writes to the append-only audit log: who (user, agent or internal role), what, on what, with what result. */
-export async function audit(actor: string, actorType: ActorType, action: string, target: string, meta?: Record<string, unknown>) {
-  await db.insert(s.auditLog).values({ actor, actorType, action, target, meta })
+/**
+ * Writes to the agent's own append-only audit log, inside the caller's isolated transaction:
+ * the database refuses the row if the context does not cover this agent.
+ */
+export async function audit(
+  tx: Tx,
+  agentId: string,
+  entry: { actor: string; actorType: ActorType; action: string; target: string; result?: 'ok' | 'refused' | 'error'; meta?: Record<string, unknown> },
+) {
+  await tx.insert(s.auditLog).values({ agentId, ...entry, result: entry.result ?? 'ok' })
 }
 
-export const actorOf = (p: Principal | null): [string, ActorType] =>
-  !p ? ['Anonyme', 'system'] : p.kind === 'user' ? [p.name, 'user'] : [`Clé ${p.keyId}`, 'system']
+/** Platform-level journal (accounts, projects, maintenance access). Never holds agent data. */
+export async function platformAudit(actor: string, action: string, target: string, meta?: Record<string, unknown>) {
+  await db.insert(s.platformAudit).values({ actor, action, target, meta })
+}

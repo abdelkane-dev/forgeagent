@@ -11,10 +11,11 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  vector,
 } from 'drizzle-orm/pg-core'
 import type {
   AccessLevel,
-  AgentPermissions,
+  AgentRole,
   AgentStatus,
   AgentType,
   Autonomy,
@@ -23,33 +24,41 @@ import type {
   Guardrails,
   IntegrationChannel,
   LogLevel,
-  Role,
-  Settings,
+  PlatformRole,
+  PlatformSettings,
   Trigger,
   WorkflowNode,
 } from '@shared/types'
 
 /**
- * ForgeAgent schema. Column shapes follow src/api/types.ts (the front-end contract);
- * nested configuration is stored as typed jsonb so the API returns it unchanged.
+ * ForgeAgent schema v2. Two kinds of tables:
+ *  - platform tables (users, sessions, catalogues): no agent data, no RLS;
+ *  - agent tables: every row carries agent_id, Row-Level Security is enabled and forced
+ *    (see drizzle/0002_isolation.sql). The database refuses any row outside the caller's agents.
  */
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'string' })
 const createdAt = () => ts('created_at').notNull().defaultNow()
+const agentRef = () =>
+  text('agent_id')
+    .notNull()
+    .references(() => agents.id, { onDelete: 'cascade' })
 
-/* ---------- Identity & access ---------- */
+export const EMBEDDING_DIM = 256
+
+/* =========================== Platform =========================== */
 
 export const users = pgTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull(),
   passwordHash: text('password_hash').notNull(),
-  role: text('role').$type<Role>().notNull().default('viewer'),
+  platformRole: text('platform_role').$type<PlatformRole>().notNull().default('member'),
   createdAt: createdAt(),
   lastActiveAt: ts('last_active_at').notNull().defaultNow(),
 }, (t) => [uniqueIndex('users_email_uq').on(sql`lower(${t.email})`)])
 
-/** Session id = SHA-256 of the cookie token: a leaked table cannot be replayed. */
+/** Session id = SHA-256 of the cookie token. */
 export const sessions = pgTable('sessions', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -58,23 +67,6 @@ export const sessions = pgTable('sessions', {
   userAgent: text('user_agent'),
 }, (t) => [index('sessions_user_idx').on(t.userId)])
 
-export const apiKeys = pgTable('api_keys', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  prefix: text('prefix').notNull(),
-  /** HMAC-SHA256(KEY_PEPPER, secret). The secret itself is never stored. */
-  keyHash: text('key_hash').notNull(),
-  environment: text('environment').$type<'live' | 'test'>().notNull(),
-  scope: text('scope').$type<'secret' | 'publishable'>().notNull().default('secret'),
-  projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-  createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
-  createdAt: createdAt(),
-  lastUsedAt: ts('last_used_at'),
-  revokedAt: ts('revoked_at'),
-}, (t) => [uniqueIndex('api_keys_hash_uq').on(t.keyHash), index('api_keys_project_idx').on(t.projectId)])
-
-/* ---------- Projects & agents ---------- */
-
 export const projects = pgTable('projects', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -82,9 +74,68 @@ export const projects = pgTable('projects', {
   description: text('description').notNull().default(''),
   stack: jsonb('stack').$type<string[]>().notNull().default([]),
   environments: jsonb('environments').$type<Record<Environment, { url: string; deployed: boolean }>>().notNull(),
-  allowedDomains: jsonb('allowed_domains').$type<string[]>().notNull().default([]),
+  createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('projects_slug_uq').on(t.slug)])
+
+export const skills = pgTable('skills', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  category: text('category').notNull(),
+  version: text('version').notNull().default('0.1.0'),
+  author: text('author').notNull(),
+  builtin: boolean('builtin').notNull().default(false),
+  instructions: text('instructions').notNull().default(''),
+  createdAt: createdAt(),
+})
+
+/** Connector types. Credentials are never stored here: they are secrets of each agent. */
+export const connectors = pgTable('connectors', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  kind: text('kind').$type<'mcp'>().notNull().default('mcp'),
+  description: text('description').notNull().default(''),
+  enabled: boolean('enabled').notNull().default(true),
+  endpoint: text('endpoint').notNull(),
+})
+
+export const templates = pgTable('templates', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  type: text('type').$type<AgentType>().notNull(),
+  description: text('description').notNull(),
+  capabilities: jsonb('capabilities').$type<string[]>().notNull().default([]),
+})
+
+export const platformSettings = pgTable('platform_settings', {
+  id: integer('id').primaryKey().default(1),
+  data: jsonb('data').$type<Omit<PlatformSettings, 'anthropicKeySet' | 'embeddings' | 'storage'>>().notNull(),
+})
+
+/** Per-user notifications. agent_id lets the API drop notifications of agents the user left. */
+export const notifications = pgTable('notifications', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  agentId: text('agent_id'),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  href: text('href').notNull(),
+  read: boolean('read').notNull().default(false),
+  at: createdAt(),
+}, (t) => [index('notifications_user_idx').on(t.userId, t.at)])
+
+/** Platform-level events (accounts, projects, maintenance). Agent events go to the agent's audit_log. */
+export const platformAudit = pgTable('platform_audit', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  at: ts('at').notNull().defaultNow(),
+  actor: text('actor').notNull(),
+  action: text('action').notNull(),
+  target: text('target').notNull(),
+  meta: jsonb('meta').$type<Record<string, unknown>>(),
+})
+
+/* =========================== Agent space (RLS) =========================== */
 
 export const agents = pgTable('agents', {
   id: text('id').primaryKey(),
@@ -93,7 +144,7 @@ export const agents = pgTable('agents', {
   role: text('role').notNull().default(''),
   type: text('type').$type<AgentType>().notNull(),
   subcategory: text('subcategory').notNull().default(''),
-  status: text('status').$type<AgentStatus>().notNull().default('active'),
+  status: text('status').$type<AgentStatus>().notNull().default('starting'),
   autonomy: text('autonomy').$type<Autonomy>().notNull().default('suggest_only'),
   model: text('model').$type<ClaudeModel>().notNull(),
   version: integer('version').notNull().default(1),
@@ -104,87 +155,146 @@ export const agents = pgTable('agents', {
   tools: jsonb('tools').$type<{ connectorId: string; access: AccessLevel; enabled: boolean }[]>().notNull().default([]),
   capabilities: jsonb('capabilities').$type<string[]>().notNull().default([]),
   integrations: jsonb('integrations').$type<IntegrationChannel[]>().notNull().default([]),
-  permissions: jsonb('permissions').$type<AgentPermissions>().notNull(),
+  allowedActions: jsonb('allowed_actions').$type<string[]>().notNull().default([]),
   guardrails: jsonb('guardrails').$type<Guardrails>().notNull(),
   costCapPerDay: doublePrecision('cost_cap_per_day').notNull().default(20),
-  memory: jsonb('memory').$type<{ longTerm: boolean; sharedWithProject: boolean; retentionDays: number }>().notNull(),
-  createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+  monthlyBudget: doublePrecision('monthly_budget').notNull().default(300),
+  allowedOrigins: jsonb('allowed_origins').$type<string[]>().notNull().default([]),
+  memory: jsonb('memory').$type<{ longTerm: boolean; shortTermTurns: number; retentionDays: number }>().notNull(),
+  createdBy: text('created_by'),
   createdAt: createdAt(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 }, (t) => [index('agents_status_idx').on(t.status)])
 
-/** "Projets gérés": many-to-many between agents and projects. */
+/** Who can reach an agent, and with which role. The only source of truth for access. */
+export const agentMembers = pgTable('agent_members', {
+  agentId: agentRef(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: text('role').$type<AgentRole>().notNull(),
+  addedAt: createdAt(),
+}, (t) => [primaryKey({ columns: [t.agentId, t.userId] }), index('agent_members_user_idx').on(t.userId)])
+
 export const agentProjects = pgTable('agent_projects', {
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  agentId: agentRef(),
   projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-}, (t) => [primaryKey({ columns: [t.agentId, t.projectId] }), index('agent_projects_project_idx').on(t.projectId)])
+}, (t) => [primaryKey({ columns: [t.agentId, t.projectId] })])
 
 export const agentVersions = pgTable('agent_versions', {
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  agentId: agentRef(),
   version: integer('version').notNull(),
   snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
   note: text('note').notNull(),
   author: text('author').notNull(),
+  regressionScore: integer('regression_score'),
   createdAt: createdAt(),
 }, (t) => [primaryKey({ columns: [t.agentId, t.version] })])
 
-export const skills = pgTable('skills', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  description: text('description').notNull(),
-  category: text('category').notNull(),
-  version: text('version').notNull().default('0.1.0'),
-  author: text('author').notNull(),
-  builtin: boolean('builtin').notNull().default(false),
-  /** Instructions appended to the agent's system prompt when the skill is attached. */
-  instructions: text('instructions').notNull().default(''),
-  createdAt: createdAt(),
-})
-
 export const agentSkills = pgTable('agent_skills', {
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  agentId: agentRef(),
   skillId: text('skill_id').notNull().references(() => skills.id, { onDelete: 'cascade' }),
   addedAt: createdAt(),
-}, (t) => [primaryKey({ columns: [t.agentId, t.skillId] }), index('agent_skills_skill_idx').on(t.skillId)])
+}, (t) => [primaryKey({ columns: [t.agentId, t.skillId] })])
 
-export const connectors = pgTable('connectors', {
+/** Generated documentation, one row per agent version. */
+export const agentDocs = pgTable('agent_docs', {
+  agentId: agentRef(),
+  version: integer('version').notNull(),
+  markdown: text('markdown').notNull(),
+  generatedAt: createdAt(),
+}, (t) => [primaryKey({ columns: [t.agentId, t.version] })])
+
+/** Secrets encrypted with a key derived for this agent only (HKDF). */
+export const agentSecrets = pgTable('agent_secrets', {
   id: text('id').primaryKey(),
+  agentId: agentRef(),
   name: text('name').notNull(),
-  kind: text('kind').$type<'mcp'>().notNull().default('mcp'),
-  description: text('description').notNull().default(''),
-  enabled: boolean('enabled').notNull().default(true),
-  endpoint: text('endpoint').notNull(),
-  /** AES-256-GCM encrypted credentials (see lib/crypto.ts). */
-  credentialsEnc: text('credentials_enc'),
-})
+  valueEnc: text('value_enc').notNull(),
+  createdAt: createdAt(),
+  lastUsedAt: ts('last_used_at'),
+}, (t) => [uniqueIndex('agent_secrets_name_uq').on(t.agentId, t.name)])
 
-/** External site connected to an agent (the front's ExternalSite). */
+export const apiKeys = pgTable('api_keys', {
+  id: text('id').primaryKey(),
+  agentId: agentRef(),
+  name: text('name').notNull(),
+  prefix: text('prefix').notNull(),
+  keyHash: text('key_hash').notNull(),
+  environment: text('environment').$type<'live' | 'test'>().notNull(),
+  scope: text('scope').$type<'secret' | 'publishable'>().notNull().default('secret'),
+  createdBy: text('created_by'),
+  createdAt: createdAt(),
+  lastUsedAt: ts('last_used_at'),
+  revokedAt: ts('revoked_at'),
+}, (t) => [uniqueIndex('api_keys_hash_uq').on(t.keyHash), index('api_keys_agent_idx').on(t.agentId)])
+
 export const integrations = pgTable('integrations', {
-  agentId: text('agent_id').primaryKey().references(() => agents.id, { onDelete: 'cascade' }),
+  id: text('id').primaryKey(),
+  agentId: agentRef(),
+  kind: text('kind').$type<'website' | 'app' | 'service'>().notNull(),
+  name: text('name').notNull(),
   url: text('url').notNull(),
-  status: text('status').$type<'connected' | 'pending' | 'unreachable'>().notNull(),
-  lastPingAt: ts('last_ping_at'),
+  environment: text('environment').$type<'test' | 'production'>().notNull().default('production'),
+  status: text('status').$type<'connected' | 'pending' | 'unreachable'>().notNull().default('pending'),
+  lastCheckAt: ts('last_check_at'),
   latencyMs: integer('latency_ms'),
-  allowedOrigins: jsonb('allowed_origins').$type<string[]>().notNull().default([]),
-  updatedAt: ts('updated_at').notNull().defaultNow(),
-})
+  secretName: text('secret_name'),
+  createdAt: createdAt(),
+}, (t) => [index('integrations_agent_idx').on(t.agentId)])
 
 export const webhooks = pgTable('webhooks', {
   id: text('id').primaryKey(),
+  agentId: agentRef(),
   url: text('url').notNull(),
   events: jsonb('events').$type<string[]>().notNull(),
   enabled: boolean('enabled').notNull().default(true),
   secretEnc: text('secret_enc').notNull(),
   createdAt: createdAt(),
-})
+}, (t) => [index('webhooks_agent_idx').on(t.agentId)])
 
-/* ---------- Execution ---------- */
+/* ---- knowledge & memory ---- */
+
+export const knowledgeDocs = pgTable('knowledge_docs', {
+  id: text('id').primaryKey(),
+  agentId: agentRef(),
+  name: text('name').notNull(),
+  kind: text('kind').$type<'pdf' | 'docx' | 'website' | 'markdown' | 'text'>().notNull(),
+  size: text('size').notNull().default('…'),
+  status: text('status').$type<'indexed' | 'indexing' | 'failed'>().notNull().default('indexing'),
+  chunks: integer('chunks').notNull().default(0),
+  storageKey: text('storage_key'),
+  error: text('error'),
+  createdAt: createdAt(),
+}, (t) => [index('knowledge_docs_agent_idx').on(t.agentId)])
+
+/** Vector index of the agent's knowledge (pgvector). Protected by RLS like every agent table. */
+export const knowledgeChunks = pgTable('knowledge_chunks', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  agentId: agentRef(),
+  docId: text('doc_id').notNull().references(() => knowledgeDocs.id, { onDelete: 'cascade' }),
+  idx: integer('idx').notNull(),
+  content: text('content').notNull(),
+  embedding: vector('embedding', { dimensions: EMBEDDING_DIM }).notNull(),
+}, (t) => [
+  index('knowledge_chunks_agent_idx').on(t.agentId),
+  index('knowledge_chunks_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
+])
+
+export const memories = pgTable('memories', {
+  id: text('id').primaryKey(),
+  agentId: agentRef(),
+  kind: text('kind').$type<'short' | 'long'>().notNull(),
+  sessionId: text('session_id'),
+  text: text('text').notNull(),
+  createdAt: createdAt(),
+}, (t) => [index('memories_agent_idx').on(t.agentId, t.kind, t.createdAt)])
+
+/* ---- execution ---- */
 
 export const runs = pgTable('runs', {
   id: text('id').primaryKey(),
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
-  source: text('source').$type<'api' | 'widget' | 'playground' | 'trigger' | 'team' | 'eval'>().notNull(),
-  sandbox: boolean('sandbox').notNull().default(false),
+  agentId: agentRef(),
+  source: text('source').$type<'api' | 'widget' | 'playground' | 'trigger' | 'team' | 'eval' | 'workflow' | 'mcp'>().notNull(),
+  environment: text('environment').$type<'test' | 'production'>().notNull(),
   status: text('status').$type<'running' | 'ok' | 'error' | 'blocked'>().notNull().default('running'),
   input: text('input').notNull(),
   output: text('output'),
@@ -193,12 +303,13 @@ export const runs = pgTable('runs', {
   tokensOut: integer('tokens_out').notNull().default(0),
   cost: doublePrecision('cost').notNull().default(0),
   durationMs: integer('duration_ms').notNull().default(0),
+  version: integer('version').notNull().default(1),
   startedAt: ts('started_at').notNull().defaultNow(),
-}, (t) => [index('runs_agent_started_idx').on(t.agentId, t.startedAt), index('runs_started_idx').on(t.startedAt)])
+}, (t) => [index('runs_agent_started_idx').on(t.agentId, t.startedAt)])
 
-/** One step of a run (the front's Span): trigger, model call, tool call, approval, output. */
 export const runSteps = pgTable('run_steps', {
   id: text('id').primaryKey(),
+  agentId: agentRef(),
   runId: text('run_id').notNull().references(() => runs.id, { onDelete: 'cascade' }),
   idx: integer('idx').notNull(),
   name: text('name').notNull(),
@@ -206,32 +317,32 @@ export const runSteps = pgTable('run_steps', {
   startMs: integer('start_ms').notNull(),
   durationMs: integer('duration_ms').notNull(),
   detail: text('detail'),
-  data: jsonb('data').$type<Record<string, unknown>>(),
 }, (t) => [index('run_steps_run_idx').on(t.runId, t.idx)])
 
 export const logs = pgTable('logs', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
+  agentId: agentRef(),
   at: ts('at').notNull().defaultNow(),
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
   level: text('level').$type<LogLevel>().notNull(),
+  environment: text('environment').$type<'test' | 'production'>().notNull().default('production'),
   message: text('message').notNull(),
-  runId: text('run_id').references(() => runs.id, { onDelete: 'set null' }),
-}, (t) => [index('logs_agent_at_idx').on(t.agentId, t.at), index('logs_at_idx').on(t.at)])
+  runId: text('run_id'),
+}, (t) => [index('logs_agent_at_idx').on(t.agentId, t.at)])
 
-/** Configuration tests ("Vérifications") with their results. */
 export const configChecks = pgTable('config_checks', {
   id: text('id').primaryKey(),
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  agentId: agentRef(),
   at: createdAt(),
   ok: boolean('ok').notNull(),
   results: jsonb('results').$type<{ id: string; label: string; status: string; detail: string }[]>().notNull(),
-}, (t) => [index('config_checks_agent_idx').on(t.agentId, t.at)])
+})
 
 export const approvals = pgTable('approvals', {
   id: text('id').primaryKey(),
-  source: text('source').$type<'agent' | 'team'>().notNull().default('agent'),
-  agentId: text('agent_id').references(() => agents.id, { onDelete: 'cascade' }),
-  requestId: text('request_id').references(() => teamRequests.id, { onDelete: 'cascade' }),
+  agentId: agentRef(),
+  source: text('source').$type<'agent' | 'team' | 'workflow'>().notNull().default('agent'),
+  requestId: text('request_id'),
+  workflowRunId: text('workflow_run_id'),
   action: text('action').notNull(),
   reason: text('reason').notNull(),
   risk: text('risk').$type<'low' | 'medium' | 'high'>().notNull(),
@@ -240,97 +351,102 @@ export const approvals = pgTable('approvals', {
   requestedAt: createdAt(),
   resolvedBy: text('resolved_by'),
   resolvedAt: ts('resolved_at'),
-}, (t) => [index('approvals_status_idx').on(t.status)])
+}, (t) => [index('approvals_agent_status_idx').on(t.agentId, t.status)])
 
-/** Append-only: a trigger in the migration rejects UPDATE and DELETE. */
+/** The agent's own append-only journal (trigger in 0002_isolation.sql). */
 export const auditLog = pgTable('audit_log', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
+  agentId: agentRef(),
   at: ts('at').notNull().defaultNow(),
   actor: text('actor').notNull(),
-  actorType: text('actor_type').$type<'user' | 'agent' | 'team' | 'system'>().notNull(),
+  actorType: text('actor_type').$type<'user' | 'agent' | 'team' | 'system' | 'platform'>().notNull(),
   action: text('action').notNull(),
   target: text('target').notNull(),
+  result: text('result').$type<'ok' | 'refused' | 'error'>(),
   meta: jsonb('meta').$type<Record<string, unknown>>(),
-}, (t) => [index('audit_at_idx').on(t.at)])
+}, (t) => [index('audit_agent_at_idx').on(t.agentId, t.at)])
 
-/* ---------- Knowledge, evals, misc ---------- */
+/** Every token spent for an agent, whatever spent it (its runs, its evaluations, the internal team…). */
+export const usageCosts = pgTable('usage_costs', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  agentId: agentRef(),
+  at: ts('at').notNull().defaultNow(),
+  source: text('source').$type<'run' | 'team' | 'eval' | 'workflow' | 'embedding'>().notNull(),
+  environment: text('environment').$type<'test' | 'production'>().notNull().default('production'),
+  model: text('model').notNull(),
+  tokensIn: integer('tokens_in').notNull().default(0),
+  tokensOut: integer('tokens_out').notNull().default(0),
+  cost: doublePrecision('cost').notNull().default(0),
+  refId: text('ref_id'),
+}, (t) => [index('usage_agent_at_idx').on(t.agentId, t.at)])
 
-export const evals = pgTable('evals', {
+/* ---- evaluation ---- */
+
+export const evalSuites = pgTable('eval_suites', {
   id: text('id').primaryKey(),
+  agentId: agentRef(),
   name: text('name').notNull(),
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
-  cases: jsonb('cases').$type<{ input: string; expect: string }[]>().notNull().default([]),
-  lastScore: integer('last_score'),
-  lastRunAt: ts('last_run_at'),
-})
-
-export const knowledgeDocs = pgTable('knowledge_docs', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  kind: text('kind').$type<'pdf' | 'docx' | 'website' | 'markdown'>().notNull(),
-  size: text('size').notNull(),
-  status: text('status').$type<'indexed' | 'indexing' | 'failed'>().notNull(),
-  chunks: integer('chunks').notNull().default(0),
-  /** Extracted plain text, searched by keyword at run time (agents with « Base de connaissances »). */
-  content: text('content'),
-  error: text('error'),
+  regression: boolean('regression').notNull().default(true),
   createdAt: createdAt(),
+}, (t) => [index('eval_suites_agent_idx').on(t.agentId)])
+
+export const evalCases = pgTable('eval_cases', {
+  id: text('id').primaryKey(),
+  agentId: agentRef(),
+  suiteId: text('suite_id').notNull().references(() => evalSuites.id, { onDelete: 'cascade' }),
+  input: text('input').notNull(),
+  expect: text('expect').notNull().default(''),
 })
 
-export const memories = pgTable('memories', {
+export const evalRuns = pgTable('eval_runs', {
   id: text('id').primaryKey(),
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
-  text: text('text').notNull(),
-  createdAt: createdAt(),
-}, (t) => [index('memories_agent_idx').on(t.agentId)])
-
-export const templates = pgTable('templates', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  type: text('type').$type<AgentType>().notNull(),
-  description: text('description').notNull(),
-  capabilities: jsonb('capabilities').$type<string[]>().notNull().default([]),
-})
-
-export const notifications = pgTable('notifications', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull(),
-  body: text('body').notNull(),
-  href: text('href').notNull(),
-  read: boolean('read').notNull().default(false),
+  agentId: agentRef(),
+  suiteId: text('suite_id').notNull().references(() => evalSuites.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  kind: text('kind').$type<'manual' | 'regression' | 'team'>().notNull(),
+  score: integer('score').notNull(),
+  passed: integer('passed').notNull(),
+  total: integer('total').notNull(),
+  results: jsonb('results').$type<{ caseId: string; input: string; passed: boolean; output: string }[]>().notNull(),
   at: createdAt(),
-}, (t) => [index('notifications_at_idx').on(t.at)])
+}, (t) => [index('eval_runs_suite_idx').on(t.suiteId, t.at)])
+
+/* ---- workflows ---- */
 
 export const workflows = pgTable('workflows', {
   id: text('id').primaryKey(),
+  agentId: agentRef(),
   name: text('name').notNull(),
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
-  nodes: jsonb('nodes').$type<WorkflowNode[]>().notNull(),
+  version: integer('version').notNull().default(1),
   published: boolean('published').notNull().default(false),
-})
+  trigger: jsonb('trigger').$type<{ kind: 'manual' | 'cron' | 'webhook'; config: string }>().notNull(),
+  nodes: jsonb('nodes').$type<WorkflowNode[]>().notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+}, (t) => [index('workflows_agent_idx').on(t.agentId)])
 
-export const delegations = pgTable('delegations', {
+export const workflowVersions = pgTable('workflow_versions', {
+  agentId: agentRef(),
+  workflowId: text('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  definition: jsonb('definition').$type<Record<string, unknown>>().notNull(),
+  createdAt: createdAt(),
+}, (t) => [primaryKey({ columns: [t.workflowId, t.version] })])
+
+export const workflowRuns = pgTable('workflow_runs', {
   id: text('id').primaryKey(),
-  fromAgentId: text('from_agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
-  toAgentId: text('to_agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
-  enabled: boolean('enabled').notNull().default(true),
-}, (t) => [uniqueIndex('delegations_pair_uq').on(t.fromAgentId, t.toAgentId)])
+  agentId: agentRef(),
+  workflowId: text('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  status: text('status').$type<'running' | 'ok' | 'error' | 'waiting_approval'>().notNull().default('running'),
+  trigger: text('trigger').notNull(),
+  input: text('input').notNull().default(''),
+  cursor: integer('cursor').notNull().default(0),
+  steps: jsonb('steps').$type<{ nodeId: string; label: string; status: 'ok' | 'error' | 'skipped' | 'waiting'; attempts: number; output: string }[]>().notNull().default([]),
+  startedAt: ts('started_at').notNull().defaultNow(),
+  durationMs: integer('duration_ms').notNull().default(0),
+}, (t) => [index('workflow_runs_wf_idx').on(t.workflowId, t.startedAt)])
 
-export const schedules = pgTable('schedules', {
-  id: text('id').primaryKey(),
-  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
-  cron: text('cron').notNull(),
-  label: text('label').notNull(),
-  enabled: boolean('enabled').notNull().default(true),
-})
-
-/** Single-row instance settings. */
-export const settings = pgTable('settings', {
-  id: integer('id').primaryKey().default(1),
-  data: jsonb('data').$type<Settings>().notNull(),
-})
-
-/* ---------- Internal team (multi-agent engine) ---------- */
+/* ---- internal team: every request and task targets ONE agent ---- */
 
 export type TeamRole = 'orchestrator' | 'architect' | 'builder' | 'security' | 'tester' | 'supervisor'
 export type TeamTaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'vetoed' | 'cancelled'
@@ -338,6 +454,7 @@ export type TeamRequestStatus = 'running' | 'awaiting_approval' | 'done' | 'fail
 
 export const teamRequests = pgTable('team_requests', {
   id: text('id').primaryKey(),
+  agentId: agentRef(),
   kind: text('kind').$type<'create_agent' | 'supervise'>().notNull(),
   input: jsonb('input').$type<Record<string, unknown>>().notNull(),
   status: text('status').$type<TeamRequestStatus>().notNull().default('running'),
@@ -350,10 +467,11 @@ export const teamRequests = pgTable('team_requests', {
   createdBy: text('created_by'),
   createdAt: createdAt(),
   finishedAt: ts('finished_at'),
-}, (t) => [index('team_requests_created_idx').on(t.createdAt)])
+}, (t) => [index('team_requests_agent_idx').on(t.agentId, t.createdAt)])
 
 export const teamTasks = pgTable('team_tasks', {
   id: text('id').primaryKey(),
+  agentId: agentRef(),
   requestId: text('request_id').notNull().references(() => teamRequests.id, { onDelete: 'cascade' }),
   parentId: text('parent_id'),
   role: text('role').$type<TeamRole>().notNull(),
@@ -369,11 +487,11 @@ export const teamTasks = pgTable('team_tasks', {
   createdAt: createdAt(),
   startedAt: ts('started_at'),
   finishedAt: ts('finished_at'),
-}, (t) => [index('team_tasks_request_idx').on(t.requestId, t.createdAt), index('team_tasks_status_idx').on(t.status)])
+}, (t) => [index('team_tasks_request_idx').on(t.requestId, t.createdAt), index('team_tasks_agent_idx').on(t.agentId, t.status)])
 
-/** Every exchange between internal agents, in order: lets a request be replayed step by step. */
 export const teamEvents = pgTable('team_events', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
+  agentId: agentRef(),
   requestId: text('request_id').notNull().references(() => teamRequests.id, { onDelete: 'cascade' }),
   taskId: text('task_id'),
   at: ts('at').notNull().defaultNow(),
@@ -382,3 +500,36 @@ export const teamEvents = pgTable('team_events', {
   type: text('type').notNull(),
   payload: jsonb('payload').$type<Record<string, unknown>>(),
 }, (t) => [index('team_events_request_idx').on(t.requestId, t.id)])
+
+/** Tables protected by RLS, in dependency order. Used by the isolation migration check and the purge. */
+export const AGENT_TABLES = [
+  'agents',
+  'agent_members',
+  'agent_projects',
+  'agent_versions',
+  'agent_skills',
+  'agent_docs',
+  'agent_secrets',
+  'api_keys',
+  'integrations',
+  'webhooks',
+  'knowledge_docs',
+  'knowledge_chunks',
+  'memories',
+  'runs',
+  'run_steps',
+  'logs',
+  'config_checks',
+  'approvals',
+  'audit_log',
+  'usage_costs',
+  'eval_suites',
+  'eval_cases',
+  'eval_runs',
+  'workflows',
+  'workflow_versions',
+  'workflow_runs',
+  'team_requests',
+  'team_tasks',
+  'team_events',
+] as const

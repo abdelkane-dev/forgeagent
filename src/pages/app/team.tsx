@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { relative } from '@/lib/format'
-import { ROLES } from '@/lib/labels'
+import { ROLES } from '@/labels'
 
 const MATRIX: [string, Record<Role, boolean>][] = [
   ['Voir les agents et les traces', { admin: true, editor: true, viewer: true }],

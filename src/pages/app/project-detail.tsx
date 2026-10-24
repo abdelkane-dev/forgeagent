@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { date, num, usd } from '@/lib/format'
-import { ENV_LABEL } from '@/lib/labels'
+import { ENV_LABEL } from '@/labels'
 
 function Settings({ project }: { project: Project }) {
   const [p, setP] = useState(project)

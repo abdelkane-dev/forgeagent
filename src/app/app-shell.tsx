@@ -12,7 +12,7 @@ import { LoadingBlock } from '@/components/common/states'
 import { StatusDot } from '@/components/common/status'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { ROLES } from '@/lib/labels'
+import { ROLES } from '@/labels'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { CommandPalette } from './command-palette'
@@ -65,7 +65,7 @@ function SidebarTop() {
         </Link>
         <LinkButton to="/app/notifications" variant="ghost" size="icon-sm" aria-label={`Notifications, ${unread} non lues`} className="relative text-muted-foreground">
           <Bell />
-          {unread > 0 && <span className="absolute top-1 right-1 size-2 rounded-full bg-cobalt" />}
+          {unread > 0 && <span className="absolute top-1 right-1 size-2 rounded-full bg-ember" />}
         </LinkButton>
       </div>
       <button

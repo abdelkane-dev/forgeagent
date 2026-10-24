@@ -113,7 +113,8 @@ function bullQueue(): TaskQueue {
   }
   return {
     async add(queue, name, data, opts) {
-      await get(queue).add(name, data, { jobId: opts?.jobId, delay: opts?.delayMs })
+      // BullMQ refuses ':' in custom ids; the per-agent prefix is kept with '.'.
+      await get(queue).add(name, data, { jobId: opts?.jobId?.replaceAll(':', '.'), delay: opts?.delayMs })
     },
     process(queue, fn, concurrency = 4) {
       const w = new Worker(queue, async (job) => fn(job.data, { id: String(job.id), name: job.name, queue }), { connection, concurrency })

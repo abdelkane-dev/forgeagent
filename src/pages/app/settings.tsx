@@ -14,7 +14,7 @@ import { UnderlineTabs } from '@/components/common/underline-tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useTheme, type Theme } from '@/lib/theme'
-import { MODELS } from '@/lib/labels'
+import { MODELS } from '@/labels'
 
 /** Two-column settings row: label + description on the left, panel on the right. */
 function Block({ title, description, children }: { title: string; description: ReactNode; children: ReactNode }) {

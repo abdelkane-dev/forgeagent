@@ -1,66 +1,65 @@
-# BACKEND_PROGRESS — back-end ForgeAgent
+# BACKEND_PROGRESS — v2 : isolation stricte par agent
 
-Reprise : lire ce fichier, puis `server/README` (section du README racine) et `src/api/` (contrat front).
+Reprise : lire ce fichier, puis `FORGE_THEME.md`, `README.md`, `src/api/types.ts` (contrat), `server/src/db/schema.ts`.
 Légende : [x] fini · [~] en cours · [ ] à faire
 
-## Décisions techniques
-- Dossier `server/` (paquet npm séparé), TypeScript 7, **Hono** + `@hono/node-server`, **Zod 4** (validation + génération OpenAPI via `z.toJSONSchema`), **Drizzle** ORM.
-- Base : **PostgreSQL 17** (docker compose) ; **PGlite** (Postgres en WASM) pour les tests et un lancement local sans Docker (`DATABASE_URL=pglite://./.data/pglite`). Mêmes migrations SQL.
-- Types partagés : le serveur importe `src/api/types.ts` (alias `@shared/*`) et le seed réutilise `src/api/mock/seed.ts` ⇒ mode démo et vraie base racontent la même histoire.
-- File : **BullMQ + Redis** (`QUEUE_DRIVER=bullmq`) ; driver `memory` de même interface pour les tests et le mono-processus.
-- LLM : SDK Anthropic côté serveur uniquement ; fournisseur `simulated` déterministe quand `ANTHROPIC_API_KEY` est absente (tests, démo hors-ligne). Modèle par rôle interne via `MODEL_*`.
-- Sécurité : mots de passe **scrypt** ; sessions = jeton aléatoire en cookie httpOnly, stocké **haché** (SHA-256) ; clés API stockées en **HMAC-SHA256 avec poivre** ; secrets (connecteurs, webhooks) en **AES-256-GCM** ; journal d'audit **append-only** (trigger SQL).
-- IDs préfixés (`agt_…`, `prj_…`) comme le front.
+La v1 (API Hono, équipe interne, widget, Docker) est en place et testée (voir l’historique git). La v2 réorganise tout autour du principe : **chaque agent est un espace totalement isolé**.
 
-## Écarts de contrat front ⇄ back
-- `ApiKey` : ajout de `projectId` et `scope: 'secret' | 'publishable'` (clé publiable pour le widget).
-- `Approval` : ajout de `source: 'agent' | 'team'` et `requestId?` (validations de l'équipe interne).
-- Nouveaux types : `User`, `TeamAgentInfo`, `TeamRequest`, `TeamTask`, `TeamEvent` (vue « Équipe interne »).
+## Décisions techniques v2
+- **Isolation en base** : chaque table liée à un agent porte `agent_id NOT NULL` et a la RLS activée et forcée (`ENABLE` + `FORCE ROW LEVEL SECURITY`). Une seule fonction SQL décide de l’accès : `forge_can_access(agent_id)`, `SECURITY DEFINER`, qui lit le contexte de transaction :
+  - `app.mode = 'user'` : l’utilisateur `app.user_id` doit être membre de l’agent (`agent_members`).
+  - `app.mode = 'task'` : seulement `app.agent_id` (tâche de l’équipe interne, runtime, worker), après vérification d’un jeton de capacité par le code.
+  - `app.mode = 'platform'` : seulement `app.agent_id`, pour un administrateur de plateforme en maintenance (chaque accès est écrit dans l’audit de l’agent).
+  - Sans contexte : aucune ligne.
+- **Rôle base dédié** : l’application se connecte avec le rôle `forge_app` (ni superutilisateur ni propriétaire), donc la RLS s’applique toujours. Les migrations et le seed passent par `DATABASE_ADMIN_URL`. Avec PGlite (tests), la session bascule en `SET ROLE forge_app` après migration.
+- **Toute requête sur des données d’agent** passe par `scoped(ctx, tx => …)` (transaction + `SET LOCAL ROLE forge_app` + `set_config`). Les tables de plateforme (users, sessions, projects, skills, connectors, templates, platform_settings, notifications, platform_audit) n’ont pas de RLS.
+- **Résolution des clés API / du widget** : fonction `SECURITY DEFINER` `forge_resolve_key(hash)` ; aucune lecture inter-agents par le code.
+- **Vecteurs** : pgvector (`vector(256)`, index HNSW cosinus), protégés par la RLS ; embeddings `hash` (feature hashing, hors ligne) derrière une interface `Embedder`.
+- **Fichiers** : stockage S3 (MinIO dans docker compose) ou `fs` (tests). `AgentStorage` n’accepte que les clés `agents/<agentId>/…`.
+- **Secrets** : AES-256-GCM avec une **clé dérivée par agent** (HKDF(`ENCRYPTION_KEY`, agentId)) ; clés API par agent, stockées en HMAC.
+- **Accès** : `agent_members(agent_id, user_id, role: owner|editor|viewer)` ; rôle de plateforme `users.platform_role: admin|member`. Être membre de A ne donne rien sur B.
+- **Préfixes** : bus `agent:<id>:*`, jobs BullMQ `agent:<id>:…`, rate limit `agent:<id>:…`.
+- **Équipe interne** : chaque tâche cible UN agent (`team_tasks.agent_id`) et reçoit un jeton de capacité HMAC (agentId, taskId, rôle, expiration) ; les capacités ouvrent un contexte `task` limité à cet agent. Coûts imputés à l’agent (`usage_costs.source = 'team'`) ; chaque échange est écrit dans l’audit de l’agent.
+- **Cycle de vie** : `starting` → `validated` → `active`, `inactive` (pause), `error`. « Forger un agent » via l’équipe crée d’abord l’agent en `starting` avec le demandeur propriétaire.
+- **Suppression** : export JSON, puis purge (DB en cascade, vecteurs, fichiers du préfixe, secrets, jobs).
+- **Modèles** : orchestrator/architect/security = opus ; builder/tester = sonnet ; supervisor = haiku, escalade sonnet sur anomalie (`MODEL_SUPERVISOR_ESCALATION`).
+
+## Écarts de contrat front ⇄ back (v2)
+- `AgentStatus` : `inactive | starting | active | validated | error`.
+- `User.platformRole` ; `Agent.myRole` (owner/editor/viewer) ; `Agent.monthlyBudget`, `Agent.allowedOrigins`.
+- Ressources par agent : `KnowledgeDoc`, `KnowledgeHit`, `MemoryItem(kind)`, `AgentIntegration`, `AgentSecret`, `ApiKey(agentId)`, `EvalSuite/EvalCase/EvalRun`, `AuditEntry(agentId, actorType, result)`, `UsageSummary`, `AgentMember`, `AgentDoc`, `Workflow(version, trigger)/WorkflowRun`.
+- Supprimés (incompatibles avec l’isolation) : délégations A2A, planifications globales, webhooks globaux (désormais par agent).
+
+## Phase 0 — Thème forge (front)
+- [~] FORGE_THEME.md, `src/labels.ts`, palette, logo, états, blasons, landing
 
 ## Phase 1 — Base de données
-- [x] Schéma Drizzle (27 tables : users, sessions, api_keys, projects, agents, agent_projects, agent_versions, skills, agent_skills, connectors, integrations, webhooks, runs, run_steps, logs, config_checks, approvals, audit_log, evals, knowledge_docs, memories, templates, notifications, workflows, delegations, schedules, settings, team_requests, team_tasks, team_events)
-- [x] Migrations (`server/drizzle/`), dont trigger append-only sur `audit_log`
-- [x] Seed de démonstration (Bonaco Pro, 5 agents, historique 7 jours, clés réelles hachées)
+- [ ] Schéma v2 + migrations régénérées + RLS + rôle `forge_app` + fonctions SECURITY DEFINER
+- [ ] pgvector (PGlite + image pgvector/pgvector:pg17)
+- [ ] Seed v2 (Bonaco Pro, membres par agent)
 
-- [x] Colonne `content` des connaissances (migration 0002) pour l'indexation réelle
+## Phase 2 — Services d’isolation
+- [ ] `scoped()` / contexte, stockage par agent, secrets dérivés, clés par agent, membres, usage/budgets, docs générées, export/purge
 
-## Phase 2 — API REST
-- [x] Routeur typé (`server/src/http/router.ts`) : validation Zod + contrôle de rôle + OpenAPI 3.1 (`/v1/openapi.json`, Swagger UI `/docs`), 80+ routes
-- [x] Auth : login, logout, me, signup (instance vide uniquement), invitations (lien), reset (sans énumération), cookie de session haché
-- [x] Ressources : overview, agents (+run, checks, versions, duplicate, site, mémoire), projects, skills, connectors, templates, traces, logs (+SSE), approvals, audit, evals, knowledge, memories, team, api-keys, webhooks (signés), notifications, workflows, delegations, schedules, settings
+## Phase 3 — Runtime, workflows, évaluations
+- [ ] Runtime agent (contexte de l’agent seul, coûts → usage_costs, environnement test séparé)
+- [ ] Moteur de workflows (déclencheurs manuel/cron/webhook, étapes, versions, exécutions, reprise)
+- [ ] Évaluations + test de régression avant publication
 
-## Phase 3 — Moteur d'agents (équipe interne)
-- [x] Abstractions : file (bullmq/memory), LLM (anthropic/simulated), bus (Redis pub/sub/mémoire)
-- [x] 6 agents internes (`server/agents/<rôle>/prompt.md` + `index.ts`), modèles via `MODEL_*`
-- [x] Moteur (`server/src/team/engine.ts`) : files par rôle, transitions imposées par le code, limites étapes/appels/tokens, détection de boucle, veto, validation humaine (reprise après approbation), `team_tasks` + `team_events` rejouables
-- [x] Capacités cloisonnées par rôle (`ROLE_CAPABILITIES`), plafond de permissions (`clampPlan`, `assertGrantable`)
-- [x] Runtime des agents utilisateurs : permissions en code, outils connecteurs, `perform_action`, validations, garde-fou injection, PII, timeout, rate limit, coût, traces pas à pas, recherche dans les connaissances
-- [x] Superviseur périodique (`SUPERVISOR_INTERVAL_SEC`) + ronde manuelle ; planificateur cron des agents
-- [x] Tests : scénario complet, validation humaine, veto, boucle, plafond, cloisonnement, Superviseur (7 tests)
+## Phase 4 — Équipe interne v2
+- [ ] Jetons de capacité, tâches mono-agent, audit et coûts imputés, supervisor + escalade
 
-## Phase 4 — Intégration aux sites
-- [x] `widget.js` (Shadow DOM, sans dépendance) configuré par `data-agent`/`data-project`/`data-key`
-- [x] Clé publiable par projet ; origine vérifiée contre les domaines autorisés du projet (CORS par projet, sans preflight)
-- [x] Vérification de site réelle (fetch SSRF-safe, détection du widget), événements console → site par canal SSE avec accusé de réception
-- [x] Site de démo `/demo-site` ; snippets du front fonctionnels de bout en bout (widget, REST, JS, Python, MCP : `POST /v1/agents/:id/mcp`)
+## Phase 5 — API v2
+- [ ] Routes `/v1/agents/:agentId/*` + auth + projets + tableau de bord limité + La Forge + admin plateforme audité + widget par agent
 
-## Phase 5 — Sécurité
-- [x] En-têtes sécurisés, limite de taille, CORS console, CSRF par origine, rate limit (login, runs, widget)
-- [x] scrypt, HMAC des clés, AES-GCM des secrets, audit append-only, logs pino expurgés, masquage PII
-- [x] SSRF (sites, webhooks, indexation), anti-escalade (éditeur ≠ actions sensibles, dernier admin protégé, plafond équipe)
-- [x] Aucun secret dans le dépôt (`scripts/init-env.mjs`)
+## Phase 6 — Tests
+- [ ] Isolation (IDOR sur chaque famille de routes, vecteurs, coûts, logs, workflows, secrets, tâches, purge, RLS sans contexte applicatif)
+- [ ] Routes critiques + scénario équipe complet (veto, boucle)
 
-## Phase 6 — Front
-- [x] `ForgeApi` étendu (auth, internalTeam, clés publiables) ; `VITE_API_URL` ⇒ HTTP, sinon mock (`npm run dev:demo`)
-- [x] Connexion réelle, invitation, garde de session, déconnexion, redirection 401
-- [x] Vue « Équipe interne » (agents, statut, tokens par rôle, files, validations, demandes rejouables)
-- [x] Clés publiables, snippets réels, import de fichiers texte, validations d'équipe dans Sécurité
+## Phase 7 — Front v2
+- [ ] Contrat `ForgeApi` v2 + mock démo + http
+- [ ] Espace agent (10 onglets), navigation thème, La Forge, tableau de bord limité, admin
 
-## Phase 7 — Vérification
-- [x] Tests serveur : 30 (équipe interne + routes critiques : auth, CSRF, rôles, exécution, clés, widget, MCP, OpenAPI)
-- [x] Playwright (`npm run test:e2e`) sur la vraie stack : connexion, création, skill, test, clé, domaine, site de démo, widget, événement, logs, équipe interne : 11/11
-- [x] Build + lint front et serveur sans erreur ni avertissement ; `docker compose up` (Postgres 17, Redis 7, API, worker) vérifié ; smoke test
-- [x] README (installation, variables, architecture, sécurité, contribution, limites)
-
-## Limites connues
-Voir la section du même nom dans `README.md` : transport MCP réel, envoi d'emails, extraction PDF/Word, exécution des workflows et A2A, export OTel, notation sémantique des évaluations.
+## Phase 8 — Livraison
+- [ ] docker compose (pgvector, Redis, MinIO, API, worker), `.env.example`
+- [ ] Playwright, build, lint, README

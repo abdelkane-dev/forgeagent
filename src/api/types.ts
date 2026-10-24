@@ -1,10 +1,38 @@
 /**
- * Domain types shared by the UI and the API layer.
- * The real back-end must return these shapes (see README > "Brancher le back-end").
+ * Domain types shared by the console and the API (server/ imports this file).
+ * v2: every agent is an isolated space. Everything that belongs to an agent carries `agentId`
+ * and is only reachable through /v1/agents/:agentId/… by its members.
  */
 
 export type ID = string
 export type ISODate = string
+
+/* ---------- Identity & access ---------- */
+
+/** Role on the platform. Admins maintain the instance; their access to an agent's data is audited in that agent. */
+export type PlatformRole = 'admin' | 'member'
+
+/** Role on ONE agent. Being a member of agent A gives nothing on agent B. */
+export type AgentRole = 'owner' | 'editor' | 'viewer'
+
+export interface User {
+  id: ID
+  name: string
+  email: string
+  platformRole: PlatformRole
+}
+
+export interface AgentMember {
+  userId: ID
+  name: string
+  email: string
+  role: AgentRole
+  addedAt: ISODate
+  /** Invitation not accepted yet (account created by invitation). */
+  invited?: boolean
+}
+
+/* ---------- Agents ---------- */
 
 export type AgentType =
   | 'conversational'
@@ -18,14 +46,15 @@ export type AgentType =
   | 'perception'
   | 'orchestrator'
 
-export type AgentStatus = 'active' | 'paused' | 'error' | 'draft'
+/** inactive = paused · starting = being built or tested · validated = tests passed, ready · active = in production · error */
+export type AgentStatus = 'inactive' | 'starting' | 'active' | 'validated' | 'error'
 
 /** suggest_only → the agent proposes; act_after_approval → human validates; act_alone_simple → autonomous on low-risk actions. */
 export type Autonomy = 'suggest_only' | 'act_after_approval' | 'act_alone_simple'
 
 export type ClaudeModel = 'claude-haiku-5-5' | 'claude-sonnet-5-5' | 'claude-opus-5-5'
 
-export type TriggerKind = 'message' | 'cron' | 'webhook' | 'db_event' | 'file' | 'agent'
+export type TriggerKind = 'message' | 'cron' | 'webhook' | 'db_event' | 'file'
 
 export interface Trigger {
   id: ID
@@ -54,19 +83,9 @@ export interface Guardrails {
 
 export interface AgentPermissions {
   allowedActions: string[]
-  roles: Role[]
-  people: string[]
 }
 
 export type IntegrationChannel = 'widget' | 'rest' | 'sdk_js' | 'sdk_python' | 'mcp_server' | 'webhook_out'
-
-export interface ExternalSite {
-  url: string
-  status: 'connected' | 'pending' | 'unreachable'
-  lastPingAt: ISODate | null
-  latencyMs: number | null
-  allowedOrigins: string[]
-}
 
 export interface AgentMetrics {
   runs24h: number
@@ -81,6 +100,8 @@ export interface AgentVersion {
   createdAt: ISODate
   author: string
   note: string
+  /** Regression score measured before publication, when the agent has evaluation suites. */
+  regressionScore?: number | null
 }
 
 export interface Agent {
@@ -106,18 +127,47 @@ export interface Agent {
   integrations: IntegrationChannel[]
   permissions: AgentPermissions
   guardrails: Guardrails
+  /** Budgets of this agent only. */
   costCapPerDay: number
-  memory: { longTerm: boolean; sharedWithProject: boolean; retentionDays: number }
-  externalSite: ExternalSite | null
+  monthlyBudget: number
+  /** Origins allowed to embed this agent's widget (CORS). */
+  allowedOrigins: string[]
+  memory: { longTerm: boolean; shortTermTurns: number; retentionDays: number }
   metrics: AgentMetrics
+  /** Role of the current user on this agent. */
+  myRole: AgentRole
   createdAt: ISODate
   updatedAt: ISODate
 }
 
-export type AgentDraft = Omit<
-  Agent,
-  'id' | 'status' | 'version' | 'versions' | 'metrics' | 'createdAt' | 'updatedAt' | 'externalSite'
->
+export interface AgentDraft {
+  name: string
+  mission: string
+  role: string
+  type: AgentType
+  subcategory: string
+  autonomy: Autonomy
+  model: ClaudeModel
+  tone: string
+  language: string
+  persona: string
+  projectIds: ID[]
+  triggers: Trigger[]
+  tools: ToolGrant[]
+  capabilities: string[]
+  skillIds: ID[]
+  integrations: IntegrationChannel[]
+  permissions: AgentPermissions
+  guardrails: Guardrails
+  costCapPerDay: number
+  monthlyBudget: number
+  allowedOrigins: string[]
+  memory: { longTerm: boolean; shortTermTurns: number; retentionDays: number }
+  /** Initial members besides the creator (who becomes owner). Existing accounts only. */
+  members?: { email: string; role: AgentRole }[]
+}
+
+/* ---------- Platform catalogues (shared, contain no agent data) ---------- */
 
 export type Environment = 'test' | 'staging' | 'production'
 
@@ -128,7 +178,6 @@ export interface Project {
   description: string
   stack: string[]
   environments: Record<Environment, { url: string; deployed: boolean }>
-  allowedDomains: string[]
   createdAt: ISODate
 }
 
@@ -139,10 +188,10 @@ export interface Skill {
   category: 'reporting' | 'alerting' | 'analysis' | 'content' | 'documents' | 'search' | 'security'
   version: string
   author: string
-  installs: number
   builtin: boolean
 }
 
+/** A connector type. Credentials are never here: they are secrets of each agent. */
 export interface Connector {
   id: ID
   name: string
@@ -152,6 +201,200 @@ export interface Connector {
   endpoint: string
 }
 
+export interface Template {
+  id: ID
+  name: string
+  type: AgentType
+  description: string
+  capabilities: string[]
+}
+
+export interface PlatformSettings {
+  killSwitch: boolean
+  globalGuardrails: { promptInjection: boolean; piiMasking: boolean; humanApproval: boolean; rateLimit: boolean }
+  defaultModel: ClaudeModel
+  retentionDays: number
+  instanceUrl: string
+  anthropicKeySet: boolean
+  embeddings: string
+  storage: string
+}
+
+export interface Notification {
+  id: ID
+  agentId: ID | null
+  title: string
+  body: string
+  href: string
+  read: boolean
+  at: ISODate
+}
+
+/* ---------- Agent space: knowledge & memory ---------- */
+
+export interface KnowledgeDoc {
+  id: ID
+  agentId: ID
+  name: string
+  kind: 'pdf' | 'docx' | 'website' | 'markdown' | 'text'
+  size: string
+  status: 'indexed' | 'indexing' | 'failed'
+  chunks: number
+  error?: string | null
+  /** File stored under agents/<agentId>/… in object storage. */
+  hasFile: boolean
+  createdAt: ISODate
+}
+
+export interface KnowledgeHit {
+  docId: ID
+  docName: string
+  chunk: string
+  score: number
+}
+
+export interface MemoryItem {
+  id: ID
+  agentId: ID
+  kind: 'short' | 'long'
+  text: string
+  sessionId?: string | null
+  createdAt: ISODate
+}
+
+/* ---------- Agent space: integration ---------- */
+
+export interface ExternalSite {
+  url: string
+  status: 'connected' | 'pending' | 'unreachable'
+  lastPingAt: ISODate | null
+  latencyMs: number | null
+  allowedOrigins: string[]
+}
+
+export interface AgentIntegration {
+  id: ID
+  agentId: ID
+  kind: 'website' | 'app' | 'service'
+  name: string
+  url: string
+  environment: 'test' | 'production'
+  status: 'connected' | 'pending' | 'unreachable'
+  lastCheckAt: ISODate | null
+  latencyMs: number | null
+  /** Name of the agent secret holding this integration's credentials, if any. */
+  secretName: string | null
+}
+
+export interface AgentSecret {
+  id: ID
+  agentId: ID
+  name: string
+  createdAt: ISODate
+  lastUsedAt: ISODate | null
+}
+
+export interface ApiKey {
+  id: ID
+  agentId: ID
+  name: string
+  prefix: string
+  environment: 'live' | 'test'
+  /** secret: server-to-server (Bearer). publishable: widget key, limited to this agent's allowed origins. */
+  scope: 'secret' | 'publishable'
+  createdAt: ISODate
+  lastUsedAt: ISODate | null
+}
+
+export interface Webhook {
+  id: ID
+  agentId: ID
+  url: string
+  events: string[]
+  enabled: boolean
+}
+
+/* ---------- Agent space: test & evaluation ---------- */
+
+export interface EvalSuite {
+  id: ID
+  agentId: ID
+  name: string
+  cases: number
+  /** Run before every new version is published. */
+  regression: boolean
+  lastScore: number | null
+  lastRunAt: ISODate | null
+}
+
+export interface EvalCase {
+  id: ID
+  suiteId: ID
+  input: string
+  /** Keywords (comma separated) the answer must contain. */
+  expect: string
+}
+
+export interface EvalRun {
+  id: ID
+  agentId: ID
+  suiteId: ID
+  version: number
+  kind: 'manual' | 'regression' | 'team'
+  score: number
+  passed: number
+  total: number
+  at: ISODate
+  results: { caseId: ID; input: string; passed: boolean; output: string }[]
+}
+
+export interface CheckResult {
+  id: string
+  label: string
+  status: 'pending' | 'ok' | 'warn' | 'fail'
+  detail: string
+}
+
+/* ---------- Agent space: workflows ---------- */
+
+export type WorkflowNodeKind = 'trigger' | 'model' | 'condition' | 'approval' | 'tool' | 'output'
+
+export interface WorkflowNode {
+  id: ID
+  kind: WorkflowNodeKind
+  label: string
+  /** model: instruction; condition: keyword; tool: tool name; output: message template */
+  config?: string
+  x: number
+  y: number
+  retry: boolean
+}
+
+export interface Workflow {
+  id: ID
+  agentId: ID
+  name: string
+  version: number
+  published: boolean
+  trigger: { kind: 'manual' | 'cron' | 'webhook'; config: string }
+  nodes: WorkflowNode[]
+  updatedAt: ISODate
+}
+
+export interface WorkflowRun {
+  id: ID
+  agentId: ID
+  workflowId: ID
+  version: number
+  status: 'running' | 'ok' | 'error' | 'waiting_approval'
+  trigger: string
+  startedAt: ISODate
+  durationMs: number
+  steps: { nodeId: ID; label: string; status: 'ok' | 'error' | 'skipped' | 'waiting'; attempts: number; output: string }[]
+}
+
+/* ---------- Agent space: activity, audit, costs, docs ---------- */
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 export interface LogEntry {
@@ -160,6 +403,7 @@ export interface LogEntry {
   agentId: ID
   level: LogLevel
   message: string
+  environment?: 'test' | 'production'
   traceId?: ID
 }
 
@@ -180,16 +424,16 @@ export interface Trace {
   tokens: number
   cost: number
   status: 'ok' | 'error' | 'blocked' | 'running'
+  environment: 'test' | 'production'
   input: string
   spans: Span[]
 }
 
 export interface Approval {
   id: ID
-  /** agent = action proposed by a user agent; team = decision requested by the internal team. */
-  source?: 'agent' | 'team'
-  /** Agent id, or the team request id when source = team. */
   agentId: ID
+  /** agent = action proposed by the agent; team = decision requested by the internal team; workflow = approval step */
+  source: 'agent' | 'team' | 'workflow'
   requestId?: ID
   action: string
   reason: string
@@ -199,152 +443,32 @@ export interface Approval {
 
 export interface AuditEntry {
   id: ID
+  agentId: ID
   at: ISODate
   actor: string
+  actorType: 'user' | 'agent' | 'team' | 'system' | 'platform'
   action: string
   target: string
+  result: 'ok' | 'refused' | 'error' | null
 }
 
-export interface EvalSuite {
-  id: ID
-  name: string
+export interface UsageSummary {
   agentId: ID
-  cases: number
-  lastScore: number | null
-  lastRunAt: ISODate | null
+  today: number
+  month: number
+  budget: { daily: number; monthly: number }
+  runs: { today: number; month: number }
+  avgCostPerRun: number
+  byModel: { model: string; tokens: number; cost: number }[]
+  bySource: { source: 'run' | 'team' | 'eval' | 'workflow' | 'embedding'; cost: number; tokens: number }[]
+  byDay: { day: string; cost: number; runs: number }[]
 }
 
-export interface KnowledgeDoc {
-  id: ID
-  name: string
-  kind: 'pdf' | 'docx' | 'website' | 'markdown'
-  size: string
-  status: 'indexed' | 'indexing' | 'failed'
-  chunks: number
-  error?: string | null
-}
-
-export interface MemoryItem {
-  id: ID
+export interface AgentDoc {
   agentId: ID
-  text: string
-  createdAt: ISODate
-}
-
-export interface Template {
-  id: ID
-  name: string
-  type: AgentType
-  description: string
-  capabilities: string[]
-}
-
-export type Role = 'admin' | 'editor' | 'viewer'
-
-export interface TeamMember {
-  id: ID
-  name: string
-  email: string
-  role: Role
-  lastActiveAt: ISODate
-  /** Invitation not accepted yet. */
-  invited?: boolean
-  /** Returned once, when the invitation is created. */
-  inviteUrl?: string
-}
-
-export interface User {
-  id: ID
-  name: string
-  email: string
-  role: Role
-}
-
-export interface ApiKey {
-  id: ID
-  name: string
-  prefix: string
-  environment: 'live' | 'test'
-  /** secret: server-to-server (Bearer). publishable: widget key, bound to one project. */
-  scope?: 'secret' | 'publishable'
-  projectId?: ID | null
-  createdAt: ISODate
-  lastUsedAt: ISODate | null
-}
-
-export interface Webhook {
-  id: ID
-  url: string
-  events: string[]
-  enabled: boolean
-}
-
-export interface Notification {
-  id: ID
-  title: string
-  body: string
-  href: string
-  read: boolean
-  at: ISODate
-}
-
-export type WorkflowNodeKind = 'trigger' | 'model' | 'condition' | 'approval' | 'tool' | 'subagent' | 'output'
-
-export interface WorkflowNode {
-  id: ID
-  kind: WorkflowNodeKind
-  label: string
-  x: number
-  y: number
-  retry: boolean
-}
-
-export interface Workflow {
-  id: ID
-  name: string
-  agentId: ID
-  nodes: WorkflowNode[]
-  published: boolean
-}
-
-export interface Delegation {
-  id: ID
-  fromAgentId: ID
-  toAgentId: ID
-  enabled: boolean
-}
-
-export interface Schedule {
-  id: ID
-  agentId: ID
-  cron: string
-  label: string
-  enabled: boolean
-}
-
-export interface Overview {
-  activeAgents: number
-  runs24h: number
-  costToday: number
-  successRate: number
-  p50LatencyMs: number
-  runsByDay: { day: string; runs: number; errors: number }[]
-}
-
-export interface Settings {
-  modelRouting: { simple: ClaudeModel; complex: ClaudeModel; fallback: ClaudeModel }
-  retentionDays: number
-  anonymizeTraces: boolean
-  monthlyBudget: number
-  budgetAlertPct: number
-  killSwitch: boolean
-  gateway: { costRouting: boolean; fallback: boolean; cache: boolean; logging: boolean }
-  globalGuardrails: Omit<Guardrails, 'forbiddenActions' | 'rateLimitPerMin'> & { rateLimit: boolean; forbiddenList: boolean }
-  otelEndpoint: string
-  notifications: Record<string, boolean>
-  notificationChannel: 'email' | 'chat' | 'both'
-  instanceUrl: string
-  anthropicKeySet: boolean
+  version: number
+  markdown: string
+  generatedAt: ISODate
 }
 
 export interface ChatMessage {
@@ -354,27 +478,33 @@ export interface ChatMessage {
   meta?: { durationMs: number; tokens: number; cost: number }
 }
 
-export interface CheckResult {
-  id: string
-  label: string
-  status: 'pending' | 'ok' | 'warn' | 'fail'
-  detail: string
+/* ---------- Dashboard (only the user's agents) ---------- */
+
+export interface Overview {
+  agents: number
+  activeAgents: number
+  runs24h: number
+  costToday: number
+  successRate: number
+  p50LatencyMs: number
+  pendingApprovals: number
+  runsByDay: { day: string; runs: number; errors: number }[]
 }
 
-/* ---------- Internal team (multi-agent engine) ---------- */
+/* ---------- Internal team (La Forge) ---------- */
 
 export type TeamRole = 'orchestrator' | 'architect' | 'builder' | 'security' | 'tester' | 'supervisor'
 
 export interface TeamAgentInfo {
   role: TeamRole
-  label: string
-  mission: string
   model: string
+  /** Supervisor only: model used when an anomaly is detected. */
+  escalationModel: string | null
   /** Server capabilities this role can use (least privilege). */
   capabilities: string[]
   status: 'idle' | 'queued' | 'working'
-  running: number
-  queued: number
+  /** Current task, only if it targets one of the user's agents. */
+  currentTask: { requestId: ID; agentId: ID; agentName: string; startedAt: ISODate | null } | null
   tasksDone: number
   tasksFailed: number
   tokens: number
@@ -386,6 +516,9 @@ export type TeamRequestStatus = 'running' | 'awaiting_approval' | 'done' | 'fail
 
 export interface TeamRequest {
   id: ID
+  /** The single agent this request works on. */
+  agentId: ID
+  agentName: string
   kind: 'create_agent' | 'supervise'
   input: Record<string, unknown>
   status: TeamRequestStatus
@@ -403,6 +536,7 @@ export interface TeamRequest {
 export interface TeamTask {
   id: ID
   requestId: ID
+  agentId: ID
   parentId: ID | null
   role: TeamRole
   status: 'queued' | 'running' | 'done' | 'failed' | 'vetoed' | 'cancelled'
@@ -421,6 +555,7 @@ export interface TeamTask {
 export interface TeamEvent {
   id: number
   requestId: ID
+  agentId: ID
   taskId: ID | null
   at: ISODate
   fromRole: string
@@ -434,4 +569,14 @@ export interface CreateAgentRequestInput {
   projectId: ID
   maxActions: string[]
   autonomyCeiling: Autonomy
+}
+
+/** Platform admin view of an agent: metadata only, never its data. */
+export interface AdminAgentRow {
+  id: ID
+  name: string
+  status: AgentStatus
+  owners: string[]
+  members: number
+  createdAt: ISODate
 }

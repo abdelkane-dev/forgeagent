@@ -10,18 +10,18 @@ import { LoadingBlock } from '@/components/common/states'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { NODE_KINDS } from '@/lib/labels'
+import { NODE_KINDS } from '@/labels'
 import { cn } from '@/lib/utils'
 
 const NODE_W = 200
 const NODE_H = 64
 const KIND_MARK: Record<WorkflowNodeKind, string> = {
   trigger: 'bg-muted-foreground',
-  model: 'bg-cobalt',
+  model: 'bg-ember',
   condition: 'bg-warn',
   approval: 'bg-warn',
   tool: 'bg-foreground',
-  subagent: 'bg-cobalt',
+  subagent: 'bg-ember',
   output: 'bg-ok',
 }
 
@@ -61,7 +61,7 @@ function Canvas({ wf, setWf, selected, setSelected, running }: { wf: Workflow; s
                 key={n.id}
                 d={x2 > x1 ? `M${x1} ${y1} C${mid} ${y1} ${mid} ${y2} ${x2} ${y2}` : `M${a.x + NODE_W / 2} ${a.y + NODE_H} C${a.x + NODE_W / 2} ${a.y + NODE_H + 40} ${n.x + NODE_W / 2} ${n.y - 40} ${n.x + NODE_W / 2} ${n.y}`}
                 fill="none"
-                stroke={active ? 'var(--cobalt)' : 'var(--input)'}
+                stroke={active ? 'var(--ember)' : 'var(--input)'}
                 strokeWidth={2}
                 className="transition-[stroke] duration-300"
               />
@@ -87,12 +87,12 @@ function Canvas({ wf, setWf, selected, setSelected, running }: { wf: Workflow; s
             className={cn(
               'absolute flex cursor-grab touch-none flex-col justify-center rounded-md bg-raised px-3 text-left transition-[box-shadow,background-color] active:cursor-grabbing',
               selected === n.id && 'ring-2 ring-foreground',
-              running === i && 'bg-cobalt text-cobalt-ink',
+              running === i && 'bg-ember text-ember-ink',
             )}
             style={{ left: n.x, top: n.y, width: NODE_W, height: NODE_H }}
           >
-            <span className={cn('flex items-center gap-1.5 text-[12px]', running === i ? 'text-cobalt-ink/80' : 'text-muted-foreground')}>
-              <span className={cn('hex size-2', running === i ? 'bg-cobalt-ink' : KIND_MARK[n.kind])} /> {NODE_KINDS[n.kind]}
+            <span className={cn('flex items-center gap-1.5 text-[12px]', running === i ? 'text-ember-ink/80' : 'text-muted-foreground')}>
+              <span className={cn('hex size-2', running === i ? 'bg-ember-ink' : KIND_MARK[n.kind])} /> {NODE_KINDS[n.kind]}
             </span>
             <span className="truncate text-[14px] font-medium">{n.label}</span>
           </button>

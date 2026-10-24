@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
-import { ACTIONS, AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY, CAPABILITIES, INTEGRATIONS, MODELS, ROLES, TRIGGERS } from '@/lib/labels'
+import { ACTIONS, AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY, CAPABILITIES, INTEGRATIONS, MODELS, ROLES, TRIGGERS } from '@/labels'
 import { cn } from '@/lib/utils'
 
 const STEPS = ['Identité', 'Type et modèle', 'Déclencheurs et outils', 'Actions et permissions', 'Skills', 'Intégration', 'Vérification'] as const
@@ -254,7 +254,7 @@ export default function AgentNew() {
                 onClick={() => set({ type: t, subcategory: AGENT_TYPES[t].subcategories[0] })}
                 className={cn('flex items-start gap-3 rounded-lg p-4 text-left transition-colors', on ? 'bg-foreground text-background' : 'bg-secondary/60 hover:bg-secondary')}
               >
-                <span className={cn('hex mt-1 size-3 shrink-0', on ? 'bg-cobalt' : 'bg-muted-foreground/40')} />
+                <span className={cn('hex mt-1 size-3 shrink-0', on ? 'bg-ember' : 'bg-muted-foreground/40')} />
                 <span>
                   <span className="block text-[15px] font-semibold">{AGENT_TYPES[t].label}</span>
                   <span className={cn('block text-[13px]', on ? 'text-background/70' : 'text-muted-foreground')}>{AGENT_TYPES[t].hint}</span>
@@ -528,7 +528,7 @@ export default function AgentNew() {
       <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
         <nav aria-label="Étapes">
           <div className="mb-3 h-1 overflow-hidden rounded-full bg-secondary lg:hidden">
-            <div className="h-full bg-cobalt transition-[width] duration-300" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+            <div className="h-full bg-ember transition-[width] duration-300" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
           </div>
           <p className="text-[14px] font-medium lg:hidden">
             {STEPS[step]} <span className="text-muted-foreground">· {step + 1} sur {STEPS.length}</span>
@@ -546,7 +546,7 @@ export default function AgentNew() {
                     i === step ? 'bg-secondary font-medium' : i < step ? 'text-foreground hover:bg-secondary/60' : 'text-muted-foreground',
                   )}
                 >
-                  {i < step ? <Check className="size-4 text-ok" /> : <span className={cn('hex size-2.5', i === step ? 'bg-cobalt' : 'bg-muted-foreground/40')} />}
+                  {i < step ? <Check className="size-4 text-ok" /> : <span className={cn('hex size-2.5', i === step ? 'bg-ember' : 'bg-muted-foreground/40')} />}
                   {s}
                 </button>
               </li>

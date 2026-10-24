@@ -16,7 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { num, pct, relative, usd } from '@/lib/format'
-import { AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY, MODELS } from '@/lib/labels'
+import { AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY, MODELS } from '@/labels'
 import { cn } from '@/lib/utils'
 
 type Tab = 'all' | Status

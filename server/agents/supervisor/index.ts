@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { registerSimulation } from '../../src/llm/simulated'
 import type { TeamAgent } from '../../src/team/types'
 
-const Input = z.object({ mode: z.enum(['register', 'sweep']), agentId: z.string().optional() })
+const Input = z.object({ mode: z.enum(['register', 'sweep']) })
 const Triage = z.object({ diagnosis: z.string().max(400), proposal: z.string().max(400), severity: z.enum(['low', 'medium', 'high']) })
 const Output = z.object({
   watching: z.number(),
@@ -10,18 +10,16 @@ const Output = z.object({
 })
 
 /**
- * Continuous monitoring. Anomaly detection is deterministic (thresholds); the model only
- * triages the error logs of agents already flagged, with the small, fast model.
+ * Monitoring of the task's agent. Anomaly detection is deterministic (thresholds); the model only
+ * triages the error logs once the agent is flagged (escalated to a larger model on anomaly).
  */
 export const supervisor: TeamAgent<'supervisor', z.infer<typeof Input>, z.infer<typeof Output>> = {
   role: 'supervisor',
-  label: 'Superviseur',
   mission: 'Surveille en continu les agents actifs (logs, erreurs, coûts), détecte les anomalies et propose des corrections.',
   input: Input,
   output: Output,
-  async run(ctx, input) {
-    const health = await ctx.caps.readAgentHealth()
-    const scope = input.mode === 'register' && input.agentId ? health.filter((h) => h.id === input.agentId) : health
+  async run(ctx) {
+    const scope = [await ctx.caps.readAgentHealth()]
     const flagged = scope
       .map((h) => {
         const signals: string[] = []
@@ -33,10 +31,10 @@ export const supervisor: TeamAgent<'supervisor', z.infer<typeof Input>, z.infer<
       .filter((h) => h.signal)
     const anomalies: z.infer<typeof Output>['anomalies'] = []
     for (const h of flagged.slice(0, 5)) {
-      const errors = await ctx.caps.readRecentErrors(h.id)
+      const errors = await ctx.caps.readRecentErrors()
       const t = await ctx.think({ agent: h.name, signal: h.signal, recentLogs: errors }, Triage, { maxTokens: 300 })
       anomalies.push({ agentId: h.id, name: h.name, signal: h.signal, ...t })
-      await ctx.caps.notify(`Superviseur : ${h.name}`, `${h.signal}. ${t.proposal}`, `/app/agents/${h.id}?tab=logs`)
+      await ctx.caps.notify(`Veilleur de Feu : ${h.name}`, `${h.signal}. ${t.proposal}`)
     }
     return { watching: scope.length, anomalies }
   },

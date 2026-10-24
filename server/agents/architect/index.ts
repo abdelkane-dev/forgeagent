@@ -13,7 +13,6 @@ const Input = z.object({
 /** Designs the agent configuration. Output is a proposal: clamped in code, then reviewed by security. */
 export const architect: TeamAgent<'architect', z.infer<typeof Input>, AgentPlan> = {
   role: 'architect',
-  label: 'Architecte',
   mission: 'Conçoit la configuration de l’agent : rôle, actions, skills, outils et permissions proposées.',
   input: Input,
   output: AgentPlan,

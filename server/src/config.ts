@@ -21,6 +21,25 @@ const Env = z.object({
 
   /** postgres://… for PostgreSQL, or pglite://<dir> / pglite://memory for the embedded engine. */
   DATABASE_URL: z.string().default('pglite://./.data/pglite'),
+  /** Owner connection used by migrations and the seed (PostgreSQL only). The app itself uses DATABASE_URL (role forge_app). */
+  DATABASE_ADMIN_URL: z.string().optional(),
+  /** Password given to the forge_app role by the migrations (PostgreSQL only). */
+  APP_DB_PASSWORD: z.string().min(12).optional(),
+
+  /** s3 (MinIO, AWS…) or fs (local folder, for tests). Keys are always agents/<agentId>/… */
+  STORAGE_DRIVER: z.enum(['s3', 'fs']).default('fs'),
+  STORAGE_DIR: z.string().default('./.data/storage'),
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_BUCKET: z.string().default('forgeagent'),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  /** hash = local feature-hashing embeddings (offline, deterministic). */
+  EMBEDDINGS_PROVIDER: z.enum(['hash']).default('hash'),
+  /** A new version is refused when its regression score drops by more than this many points. */
+  REGRESSION_TOLERANCE: z.coerce.number().int().min(0).max(100).default(0),
+  /** Lifetime of the capability token given to each internal team task. */
+  CAPABILITY_TTL_SEC: z.coerce.number().int().positive().default(600),
   /** bullmq (needs REDIS_URL) or memory (single process, for tests and quick local runs). */
   QUEUE_DRIVER: z.enum(['bullmq', 'memory']).default('memory'),
   REDIS_URL: z.string().default('redis://localhost:6379'),
@@ -32,12 +51,14 @@ const Env = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
 
   // Models per internal role: never hard-coded in the agents themselves.
-  MODEL_ORCHESTRATOR: model.default('claude-sonnet-5-5'),
+  MODEL_ORCHESTRATOR: model.default('claude-opus-5-5'),
   MODEL_ARCHITECT: model.default('claude-opus-5-5'),
-  MODEL_BUILDER: model.default('claude-sonnet-5-5'),
   MODEL_SECURITY: model.default('claude-opus-5-5'),
-  MODEL_TESTER: model.default('claude-haiku-5-5'),
+  MODEL_BUILDER: model.default('claude-sonnet-5-5'),
+  MODEL_TESTER: model.default('claude-sonnet-5-5'),
   MODEL_SUPERVISOR: model.default('claude-haiku-5-5'),
+  /** Used by the supervisor as soon as an anomaly is detected. */
+  MODEL_SUPERVISOR_ESCALATION: model.default('claude-sonnet-5-5'),
 
   // Team guardrails, per request.
   TEAM_MAX_STEPS: z.coerce.number().int().positive().default(12),

@@ -16,14 +16,13 @@ const Output = Draft.extend({ agentId: z.string() })
  */
 export const builder: TeamAgent<'builder', z.infer<typeof Input>, z.infer<typeof Output>> = {
   role: 'builder',
-  label: 'Constructeur',
   mission: 'Génère l’agent à partir du plan validé et l’enregistre en base.',
   input: Input,
   output: Output,
   async run(ctx, input) {
     const draft = await ctx.think({ plan: input.plan }, Draft, { maxTokens: 600 })
-    const { agentId } = await ctx.caps.createAgentFromPlan(input.plan, input.ceiling, draft.persona)
-    await ctx.event('agent.created', { agentId })
+    const { agentId } = await ctx.caps.configureAgentFromPlan(input.plan, input.ceiling, draft.persona)
+    await ctx.event('agent.configured', { agentId })
     return { ...draft, agentId }
   },
 }

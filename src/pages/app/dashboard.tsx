@@ -11,7 +11,7 @@ import { AgentStatus, StatusDot } from '@/components/common/status'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { duration, num, pct, usd } from '@/lib/format'
-import { AGENT_TYPES } from '@/lib/labels'
+import { AGENT_TYPES } from '@/labels'
 import { cn } from '@/lib/utils'
 
 const DISMISS_KEY = 'fa:onboarding-dismissed'

@@ -15,7 +15,7 @@ export const AgentPlan = z.object({
   forbiddenActions: z.array(z.string().max(120)).max(20).default([]),
   skillIds: z.array(z.string()).max(20).default([]),
   tools: z.array(z.object({ connectorId: z.string(), access: z.enum(['read', 'read_write']) })).max(10).default([]),
-  triggers: z.array(z.enum(['message', 'cron', 'webhook', 'db_event', 'file', 'agent'])).max(6).default(['message']),
+  triggers: z.array(z.enum(['message', 'cron', 'webhook', 'db_event', 'file'])).max(6).default(['message']),
   integrations: z.array(Channel).max(6).default(['rest']),
   costCapPerDay: z.number().min(1).max(500).default(20),
   rationale: z.string().max(1000).default(''),

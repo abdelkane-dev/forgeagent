@@ -159,10 +159,10 @@ export default function Login() {
           </p>
         </main>
       </div>
-      <div className="relative hidden overflow-hidden bg-cobalt lg:block" aria-hidden>
+      <div className="relative hidden overflow-hidden bg-ember lg:block" aria-hidden>
         <div className="hex absolute top-1/2 left-[18%] aspect-square w-[130%] -translate-y-1/2 bg-background/12" />
-        <div className="hex absolute top-[22%] left-[40%] aspect-square w-[28%] bg-cobalt-ink" />
-        <p className="absolute bottom-10 left-10 max-w-[22ch] text-[34px] leading-[1.05] font-extrabold tracking-[-0.04em] text-cobalt-ink">Vos agents, vos clés, votre serveur.</p>
+        <div className="hex absolute top-[22%] left-[40%] aspect-square w-[28%] bg-ember-ink" />
+        <p className="absolute bottom-10 left-10 max-w-[22ch] text-[34px] leading-[1.05] font-extrabold tracking-[-0.04em] text-ember-ink">Vos agents, vos clés, votre serveur.</p>
       </div>
     </div>
   )

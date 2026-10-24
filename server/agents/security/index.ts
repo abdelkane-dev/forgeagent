@@ -22,7 +22,6 @@ const MALICIOUS = /(exfiltr|vol(er)? des donn|contourn|bypass|désactiv(er)? (le
  */
 export const security: TeamAgent<'security', z.infer<typeof Input>, z.infer<typeof Output>> = {
   role: 'security',
-  label: 'Contrôleur sécurité',
   mission: 'Examine chaque plan et chaque action avant exécution ; peut refuser ou exiger une validation humaine.',
   input: Input,
   output: Output,

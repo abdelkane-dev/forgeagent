@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
 
 const SPAN_COLOR: Record<Span['kind'], string> = {
   trigger: 'bg-muted-foreground/50',
-  model: 'bg-cobalt',
+  model: 'bg-ember',
   tool: 'bg-foreground/60',
   approval: 'bg-warn',
   output: 'bg-ok',

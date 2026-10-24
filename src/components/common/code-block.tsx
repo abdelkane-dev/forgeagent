@@ -6,9 +6,9 @@ import { CopyButton } from './copy-button'
 const RULES: [RegExp, string][] = [
   [/^(\/\/[^\n]*|#[^\n]*)/, 'text-muted-foreground'],
   [/^("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/, 'text-ok'],
-  [/^\b(import|from|const|let|await|async|new|return|export|def|print|curl|npm|npx|pip|docker|git|cd)\b/, 'text-cobalt'],
+  [/^\b(import|from|const|let|await|async|new|return|export|def|print|curl|npm|npx|pip|docker|git|cd)\b/, 'text-ember'],
   [/^\b(\d+(?:\.\d+)?)\b/, 'text-warn'],
-  [/^(<\/?[a-zA-Z][\w-]*|\/?>)/, 'text-cobalt'],
+  [/^(<\/?[a-zA-Z][\w-]*|\/?>)/, 'text-ember'],
 ]
 
 function highlight(code: string): ReactNode[] {

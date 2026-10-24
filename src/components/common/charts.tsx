@@ -45,7 +45,7 @@ export function ColumnChart({
           {data.map((d, i) => (
             <div key={d.label} className="group relative flex h-full flex-1 flex-col justify-end">
               <motion.div
-                className={cn('relative w-full rounded-t-[3px]', i === highlight ? 'bg-cobalt' : 'bg-foreground/22 group-hover:bg-foreground/35')}
+                className={cn('relative w-full rounded-t-[3px]', i === highlight ? 'bg-ember' : 'bg-foreground/22 group-hover:bg-foreground/35')}
                 initial={reduce ? false : { scaleY: 0 }}
                 animate={{ scaleY: 1 }}
                 transition={{ duration: 0.6, delay: i * 0.04, ease: [0.22, 1, 0.36, 1] }}
@@ -86,13 +86,13 @@ function niceStep(raw: number) {
 }
 
 /** Horizontal meter with a cap marker, e.g. spend against budget. */
-export function Meter({ value, max, className, tone }: { value: number; max: number; className?: string; tone?: 'cobalt' | 'warn' | 'danger' }) {
+export function Meter({ value, max, className, tone }: { value: number; max: number; className?: string; tone?: 'ember' | 'warn' | 'danger' }) {
   const pct = Math.min(100, (value / max) * 100)
-  const t = tone ?? (pct >= 100 ? 'danger' : pct >= 80 ? 'warn' : 'cobalt')
+  const t = tone ?? (pct >= 100 ? 'danger' : pct >= 80 ? 'warn' : 'ember')
   return (
     <div className={cn('h-1.5 w-full overflow-hidden rounded-full bg-secondary', className)} role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
       <div
-        className={cn('h-full rounded-full transition-[width] duration-500', t === 'cobalt' ? 'bg-cobalt' : t === 'warn' ? 'bg-warn' : 'bg-danger')}
+        className={cn('h-full rounded-full transition-[width] duration-500', t === 'ember' ? 'bg-ember' : t === 'warn' ? 'bg-warn' : 'bg-danger')}
         style={{ width: `${pct}%` }}
       />
     </div>

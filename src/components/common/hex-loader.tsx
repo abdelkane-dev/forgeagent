@@ -7,7 +7,7 @@ export function HexLoader({ className }: { className?: string }) {
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="hex size-2.5 animate-pulse bg-cobalt"
+          className="hex size-2.5 animate-pulse bg-ember"
           style={{ animationDelay: `${i * 160}ms`, animationDuration: '900ms' }}
         />
       ))}

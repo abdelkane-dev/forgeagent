@@ -6,7 +6,7 @@ import { CodeBlock } from '@/components/common/code-block'
 import { NativeSelect } from '@/components/common/field'
 import { LinkButton } from '@/components/common/link-button'
 import { Kbd } from '@/components/common/page'
-import { AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY } from '@/lib/labels'
+import { AGENT_TYPE_ORDER, AGENT_TYPES, AUTONOMY } from '@/labels'
 import { agentSnippets } from '@/lib/snippets'
 
 const H2 = ({ children }: { children: ReactNode }) => <h2 className="mt-12 mb-3 text-[22px] font-bold tracking-[-0.03em] first:mt-0">{children}</h2>

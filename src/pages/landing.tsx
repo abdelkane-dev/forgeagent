@@ -7,7 +7,7 @@ import { CodeBlock } from '@/components/common/code-block'
 import { Item, Shutter, Stagger } from '@/components/landing/reveal'
 import { RunDemo } from '@/components/landing/run-demo'
 import { useTheme } from '@/lib/theme'
-import { AGENT_TYPE_ORDER, AGENT_TYPES } from '@/lib/labels'
+import { AGENT_TYPE_ORDER, AGENT_TYPES } from '@/labels'
 import { cn } from '@/lib/utils'
 
 const GITHUB = 'https://github.com/forgeagent/forgeagent'
@@ -49,7 +49,7 @@ function HexButton({ to, children, className }: { to: string; children: React.Re
     <Link
       to={to}
       className={cn(
-        'hex-x inline-flex h-14 items-center justify-center bg-foreground px-9 text-[17px] font-bold text-background transition-[background-color,transform] duration-200 hover:bg-cobalt hover:text-cobalt-ink active:scale-[0.98]',
+        'hex-x inline-flex h-14 items-center justify-center bg-foreground px-9 text-[17px] font-bold text-background transition-[background-color,transform] duration-200 hover:bg-ember hover:text-ember-ink active:scale-[0.98]',
         className,
       )}
     >
@@ -71,7 +71,7 @@ function Hero() {
       <motion.div
         aria-hidden
         style={{ y, rotate }}
-        className="hex hero-ingot absolute hidden bg-cobalt lg:block"
+        className="hex hero-ingot absolute hidden bg-ember lg:block"
         initial={reduce ? false : { opacity: 0, scale: 0.92 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
@@ -93,7 +93,7 @@ function Hero() {
           </Item>
           <Item className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
             <HexButton to="/app">Ouvrir la console</HexButton>
-            <a href={GITHUB} target="_blank" rel="noreferrer" className="text-[16px] font-semibold underline decoration-2 underline-offset-[6px] hover:text-cobalt">
+            <a href={GITHUB} target="_blank" rel="noreferrer" className="text-[16px] font-semibold underline decoration-2 underline-offset-[6px] hover:text-ember">
               Code source sur GitHub
             </a>
           </Item>
@@ -101,14 +101,14 @@ function Hero() {
 
         {/* The live run sits on the ingot */}
         <div className="relative min-w-0 lg:col-span-5 lg:col-start-8">
-          <div aria-hidden className="hex absolute top-[-6%] left-1/2 aspect-square w-[130vw] -translate-x-1/2 bg-cobalt sm:w-[110vw] lg:hidden" />
+          <div aria-hidden className="hex absolute top-[-6%] left-1/2 aspect-square w-[130vw] -translate-x-1/2 bg-ember sm:w-[110vw] lg:hidden" />
           <motion.div
             className="relative py-[14vw] sm:py-24 lg:py-0"
             initial={reduce ? false : { opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
           >
-            <p className="mb-3 w-fit rounded-md bg-cobalt px-2.5 py-1 text-[15px] font-semibold text-cobalt-ink">Choisissez un incident, regardez l’agent travailler</p>
+            <p className="mb-3 w-fit rounded-md bg-ember px-2.5 py-1 text-[15px] font-semibold text-ember-ink">Choisissez un incident, regardez l’agent travailler</p>
             <RunDemo />
           </motion.div>
         </div>
@@ -118,8 +118,8 @@ function Hero() {
 }
 
 /* ---------- Features: close-ups on a board ---------- */
-function Tile({ className, title, text, children, tone = 'card' }: { className?: string; title?: string; text?: string; children?: React.ReactNode; tone?: 'card' | 'ink' | 'cobalt' | 'secondary' }) {
-  const toneCls = { card: 'bg-card', ink: 'bg-foreground text-background', cobalt: 'bg-cobalt text-cobalt-ink', secondary: 'bg-secondary' }[tone]
+function Tile({ className, title, text, children, tone = 'card' }: { className?: string; title?: string; text?: string; children?: React.ReactNode; tone?: 'card' | 'ink' | 'ember' | 'secondary' }) {
+  const toneCls = { card: 'bg-card', ink: 'bg-foreground text-background', ember: 'bg-ember text-ember-ink', secondary: 'bg-secondary' }[tone]
   return (
     <Item className={cn('relative overflow-hidden rounded-lg', toneCls, className)}>
       {children}
@@ -143,7 +143,7 @@ function Features() {
         <Tile className="col-span-2 row-span-2 sm:col-span-6" title="Plafond de coût par agent" text="L’agent se met en pause en l’atteignant.">
           <div data-ui className="absolute top-7 -right-10 left-[30%] text-[280%] sm:top-6 sm:text-[300%]" aria-hidden>
             <div className="relative h-[0.18em] rounded-full bg-secondary">
-              <div className="absolute inset-y-0 left-0 w-[62%] rounded-full bg-cobalt" />
+              <div className="absolute inset-y-0 left-0 w-[62%] rounded-full bg-ember" />
               <div className="absolute top-1/2 left-[62%] size-[0.7em] -translate-1/2 rounded-full bg-foreground" />
             </div>
             <div className="mt-[0.35em] text-[40%] font-semibold tabular">30 $ / jour</div>
@@ -152,7 +152,7 @@ function Features() {
         <Tile className="col-span-2 row-span-3 sm:col-span-6 sm:row-span-4" tone="ink" title="Trois niveaux d’autonomie" text="Suggérer, agir après validation, ou agir seul sur les cas simples.">
           <div data-ui className="absolute top-8 right-6 left-6 flex flex-wrap gap-[0.2em] text-[220%] sm:top-10 lg:right-auto lg:flex-nowrap lg:text-[300%]" aria-hidden>
             {['Suggère seulement', 'Après validation', 'Agit seul'].map((x, i) => (
-              <div key={x} className={cn('w-fit rounded-[0.2em] px-[0.4em] py-[0.12em] text-[55%] font-bold whitespace-nowrap', i === 1 ? 'bg-cobalt text-cobalt-ink' : 'bg-background/10')}>
+              <div key={x} className={cn('w-fit rounded-[0.2em] px-[0.4em] py-[0.12em] text-[55%] font-bold whitespace-nowrap', i === 1 ? 'bg-ember text-ember-ink' : 'bg-background/10')}>
                 {x}
               </div>
             ))}
@@ -181,15 +181,15 @@ function Features() {
             ))}
           </div>
         </Tile>
-        <Tile className="col-span-1 row-span-2 sm:col-span-3" tone="cobalt" title="Statut en direct" text="Actif, en pause ou en erreur.">
+        <Tile className="col-span-1 row-span-2 sm:col-span-3" tone="ember" title="Statut en direct" text="Actif, en pause ou en erreur.">
           <div data-ui className="absolute -top-2 right-4 flex items-center gap-[0.25em] text-[300%] font-extrabold tracking-[-0.04em]" aria-hidden>
-            <span className="hex size-[0.5em] bg-cobalt-ink" /> Actif
+            <span className="hex size-[0.5em] bg-ember-ink" /> Actif
           </div>
         </Tile>
         <Tile className="col-span-2 row-span-2 sm:col-span-6" tone="secondary" title="Rôles et accès" text="Administrateur, éditeur, lecteur, et accès nominatifs par agent.">
           <div data-ui className="absolute -top-4 right-6 flex text-[300%] sm:-top-6 sm:text-[360%]" aria-hidden>
             {['AK', 'ID', 'TM'].map((x, i) => (
-              <span key={x} className={cn('hex -ml-[0.2em] flex size-[1.1em] items-center justify-center text-[38%] font-extrabold', i === 0 ? 'bg-foreground text-background' : i === 1 ? 'bg-cobalt text-cobalt-ink' : 'bg-card')}>
+              <span key={x} className={cn('hex -ml-[0.2em] flex size-[1.1em] items-center justify-center text-[38%] font-extrabold', i === 0 ? 'bg-foreground text-background' : i === 1 ? 'bg-ember text-ember-ink' : 'bg-card')}>
                 {x}
               </span>
             ))}
@@ -312,7 +312,7 @@ function Showcase() {
                   role="tab"
                   aria-selected={tab === k}
                   onClick={() => setTab(k)}
-                  className={cn('text-[18px] font-semibold transition-colors', tab === k ? 'text-foreground underline decoration-cobalt decoration-[3px] underline-offset-[10px]' : 'text-muted-foreground hover:text-foreground')}
+                  className={cn('text-[18px] font-semibold transition-colors', tab === k ? 'text-foreground underline decoration-ember decoration-[3px] underline-offset-[10px]' : 'text-muted-foreground hover:text-foreground')}
                 >
                   {SHOW[k].tab}
                 </button>
@@ -324,7 +324,7 @@ function Showcase() {
             <p className="mt-6 max-w-[38ch] text-[18px] leading-[1.5]">{s.text}</p>
           </Item>
           <Item className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Link to={tab === 'create' ? '/app/agents/new' : tab === 'test' ? '/app/playground' : '/app/integrations'} className="flex h-[72px] items-center rounded-lg bg-foreground px-6 text-[17px] font-bold text-background transition-colors hover:bg-cobalt hover:text-cobalt-ink">
+            <Link to={tab === 'create' ? '/app/agents/new' : tab === 'test' ? '/app/playground' : '/app/integrations'} className="flex h-[72px] items-center rounded-lg bg-foreground px-6 text-[17px] font-bold text-background transition-colors hover:bg-ember hover:text-ember-ink">
               Essayer dans la console
             </Link>
             <Link to="/docs" className="flex h-[72px] items-center rounded-lg bg-secondary px-6 text-[17px] font-bold transition-colors hover:bg-input">
@@ -422,10 +422,10 @@ function HowItWorks() {
   )
 }
 
-/* ---------- The band: one full-width field of cobalt ---------- */
+/* ---------- The band: one full-width field of ember ---------- */
 function TypesBand() {
   return (
-    <section className="bg-cobalt text-cobalt-ink" style={{ clipPath: 'polygon(0 48px, 48px 0, calc(100% - 48px) 0, 100% 48px, 100% 100%, 0 100%)' }}>
+    <section className="bg-ember text-ember-ink" style={{ clipPath: 'polygon(0 48px, 48px 0, calc(100% - 48px) 0, 100% 48px, 100% 100%, 0 100%)' }}>
       <div className="mx-auto grid max-w-[1440px] gap-12 px-4 py-[120px] sm:px-8 lg:grid-cols-12 lg:py-[160px]">
         <Stagger className="min-w-0 lg:col-span-5">
           <Item>
@@ -447,7 +447,7 @@ cd forgeagent && docker compose up
           <ul className="grid gap-x-8 sm:grid-cols-2">
             {AGENT_TYPE_ORDER.map((t) => (
               <Item as="li" key={t} className="flex items-baseline gap-3 py-3">
-                <span className="hex size-3 shrink-0 translate-y-[-2px] bg-cobalt-ink" aria-hidden />
+                <span className="hex size-3 shrink-0 translate-y-[-2px] bg-ember-ink" aria-hidden />
                 <span>
                   <span className="block text-[22px] font-bold tracking-[-0.03em]">{AGENT_TYPES[t].label}</span>
                   <span className="block text-[15px] opacity-85">{AGENT_TYPES[t].hint}</span>
@@ -481,7 +481,7 @@ function Faq() {
       <Stagger className="grid gap-2 lg:col-span-8">
         {FAQ.map(([q, a], i) => (
           <Item key={q}>
-            <details name="faq" open={i === 0} className="group rounded-lg bg-card transition-colors open:bg-cobalt open:text-cobalt-ink">
+            <details name="faq" open={i === 0} className="group rounded-lg bg-card transition-colors open:bg-ember open:text-ember-ink">
               <summary className="flex min-h-[72px] cursor-pointer list-none items-center justify-between gap-6 px-6 text-[19px] font-semibold [&::-webkit-details-marker]:hidden">
                 {q}
                 <span className="relative size-4 shrink-0" aria-hidden>
@@ -503,7 +503,7 @@ function Cta() {
   return (
     <Link
       to="/app"
-      className="group relative block h-[46svh] min-h-[320px] overflow-hidden bg-cobalt text-cobalt-ink transition-colors duration-150 hover:bg-foreground hover:text-background focus-visible:bg-foreground focus-visible:text-background lg:h-[60svh]"
+      className="group relative block h-[46svh] min-h-[320px] overflow-hidden bg-ember text-ember-ink transition-colors duration-150 hover:bg-foreground hover:text-background focus-visible:bg-foreground focus-visible:text-background lg:h-[60svh]"
       style={{ clipPath: 'polygon(0 48px, 48px 0, calc(100% - 48px) 0, 100% 48px, 100% 100%, 0 100%)' }}
     >
       <span className="absolute top-14 left-4 max-w-[26ch] text-[17px] font-semibold sm:left-8 sm:text-[20px]">Ouvrez la console en mode démo, sans installation ni compte.</span>
@@ -532,7 +532,7 @@ function Footer() {
           {letters.map((l, i) => (
             <span
               key={i}
-              className={cn('flex flex-1 items-end justify-center rounded-t-md pb-[0.08em] text-[clamp(28px,7.5vw,128px)] leading-none font-extrabold tracking-[-0.04em]', i === 5 ? 'bg-cobalt text-cobalt-ink' : i % 2 ? 'bg-secondary' : 'bg-foreground text-background')}
+              className={cn('flex flex-1 items-end justify-center rounded-t-md pb-[0.08em] text-[clamp(28px,7.5vw,128px)] leading-none font-extrabold tracking-[-0.04em]', i === 5 ? 'bg-ember text-ember-ink' : i % 2 ? 'bg-secondary' : 'bg-foreground text-background')}
               style={{ height: `${heights[i]}%` }}
               aria-hidden
             >
@@ -568,7 +568,7 @@ function Footer() {
         </div>
         <div className="mt-14 flex items-center justify-between gap-4 text-[14px] text-muted-foreground">
           <span>© 2026 ForgeAgent · logiciel libre</span>
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-foreground px-3 font-semibold text-background hover:bg-cobalt hover:text-cobalt-ink">
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-foreground px-3 font-semibold text-background hover:bg-ember hover:text-ember-ink">
             <ArrowUp className="size-4" /> Haut de page
           </button>
         </div>

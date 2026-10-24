@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 import { clock, date, duration, num, pct, relative, usd } from '@/lib/format'
-import { ACTIONS, AGENT_TYPES, AUTONOMY, MODELS, TRIGGERS } from '@/lib/labels'
+import { ACTIONS, AGENT_TYPES, AUTONOMY, MODELS, TRIGGERS } from '@/labels'
 import { agentSnippets, API_HOST } from '@/lib/snippets'
 import { cn } from '@/lib/utils'
 
@@ -465,7 +465,7 @@ function Versions({ agent }: { agent: Agent }) {
         {agent.versions.map((v, i) => (
           <li key={v.version} className="grid grid-cols-[24px_1fr] gap-4">
             <div className="flex flex-col items-center">
-              <span className={cn('hex mt-1.5 size-3', i === 0 ? 'bg-cobalt' : 'bg-muted-foreground/40')} />
+              <span className={cn('hex mt-1.5 size-3', i === 0 ? 'bg-ember' : 'bg-muted-foreground/40')} />
               {i < agent.versions.length - 1 && <span className="w-px flex-1 bg-border" />}
             </div>
             <div className="flex flex-wrap items-start justify-between gap-3 pb-6">

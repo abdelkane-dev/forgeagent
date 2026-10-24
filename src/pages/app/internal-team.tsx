@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { clock, compact, duration, num, relative, usd } from '@/lib/format'
-import { ACTIONS, AUTONOMY } from '@/lib/labels'
+import { ACTIONS, AUTONOMY } from '@/labels'
 import { cn } from '@/lib/utils'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -28,8 +28,8 @@ const ROLE_LABEL: Record<string, string> = {
   user: 'Vous',
 }
 
-const STATUS: Record<TeamRequestStatus, { label: string; tone: 'ok' | 'warn' | 'danger' | 'muted' | 'cobalt' }> = {
-  running: { label: 'En cours', tone: 'cobalt' },
+const STATUS: Record<TeamRequestStatus, { label: string; tone: 'ok' | 'warn' | 'danger' | 'muted' | 'ember' }> = {
+  running: { label: 'En cours', tone: 'ember' },
   awaiting_approval: { label: 'Validation requise', tone: 'warn' },
   done: { label: 'Terminée', tone: 'ok' },
   failed: { label: 'Échec', tone: 'danger' },
@@ -209,7 +209,7 @@ function RequestDetail({ id, onClose }: { id: string; onClose: () => void }) {
       <h4 className="mb-2 text-[14px] font-semibold">Échanges, dans l’ordre</h4>
       <ol className="scrollbar-thin max-h-80 overflow-y-auto text-[13.5px]" aria-live="polite">
         {shown.map((e, i) => (
-          <li key={e.id} className={cn('grid grid-cols-[4.5rem_1fr] gap-3 py-1.5', replay !== null && i === shown.length - 1 && 'text-cobalt')}>
+          <li key={e.id} className={cn('grid grid-cols-[4.5rem_1fr] gap-3 py-1.5', replay !== null && i === shown.length - 1 && 'text-ember')}>
             <span className="text-muted-foreground tabular">{clock(e.at)}</span>
             <span>
               <b className="font-medium">{ROLE_LABEL[e.fromRole] ?? e.fromRole}</b>
@@ -301,10 +301,10 @@ export default function InternalTeam() {
                   <div key={a.role} className="grid gap-2 px-4 py-3.5 md:grid-cols-[1fr_auto] md:items-center md:gap-6">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <StatusDot tone={a.status === 'working' ? 'cobalt' : a.status === 'queued' ? 'warn' : 'muted'} pulse={a.status === 'working'} />
+                        <StatusDot tone={a.status === 'working' ? 'ember' : a.status === 'queued' ? 'warn' : 'muted'} pulse={a.status === 'working'} />
                         <span className="text-[15px] font-semibold">{a.label}</span>
                         <Tag className="font-mono text-[11.5px]">{a.model}</Tag>
-                        {a.status === 'working' && <span className="text-[13px] text-cobalt">au travail</span>}
+                        {a.status === 'working' && <span className="text-[13px] text-ember">au travail</span>}
                       </div>
                       <p className="mt-1 text-[13.5px] text-muted-foreground">{a.mission}</p>
                       <p className="mt-1.5 text-[12.5px] text-muted-foreground">
