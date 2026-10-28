@@ -1,8 +1,13 @@
 <div align="center">
 
-<img src="docs/assets/logo.svg" alt="" width="84" height="84" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo.svg">
+  <img src="docs/assets/logo-dark.svg" alt="ForgeAgent" width="320" />
+</picture>
 
-# ForgeAgent
+<br />
+<br />
 
 **Forgez, testez, intégrez et supervisez des agents IA propulsés par Claude, sur votre propre infrastructure.**
 Chaque agent est un espace scellé : ses données, ses clés et ses coûts n’appartiennent qu’à lui.

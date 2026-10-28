@@ -118,7 +118,7 @@ export default function Login() {
             <ArrowLeft className="size-4" /> Retour au site
           </Link>
         </div>
-        <main className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center py-12">
+        <main className="mx-auto flex w-full max-w-100 flex-1 flex-col justify-center py-12">
           <h1 className="text-[32px] leading-tight font-extrabold tracking-[-0.04em]">
             {mode === 'signup' ? (signup === 'first' ? 'Créer le compte administrateur' : 'Créer votre compte') : mode === 'reset' ? 'Réinitialiser le mot de passe' : 'Connexion à votre instance'}
           </h1>
