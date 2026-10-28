@@ -36,3 +36,7 @@ server-dev.log
 .playwright-cli
 e2e-artifacts
 compose-build.log
+
+# Agensi marketplace assets and paid skills
+skills/forgeagent-evaluator/
+skills/*.zip
