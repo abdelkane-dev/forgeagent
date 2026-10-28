@@ -37,6 +37,5 @@ server-dev.log
 e2e-artifacts
 compose-build.log
 
-# Agensi marketplace assets and paid skills
-skills/forgeagent-evaluator/
-skills/*.zip
+# Agensi marketplace skills and assets
+skills/
