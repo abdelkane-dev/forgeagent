@@ -9,7 +9,7 @@ Chaque agent est un espace scellé : ses données, ses clés et ses coûts n’a
 
 [![CI](https://github.com/abdelkane-dev/forgeagent/actions/workflows/ci.yml/badge.svg)](https://github.com/abdelkane-dev/forgeagent/actions/workflows/ci.yml)
 [![Licence : Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-orange.svg)](LICENSE)
-[![M8ven Trust](https://m8ven.ai/badge/mcp/abdelkane-dev/forgeagent)](https://m8ven.ai/mcp/abdelkane-dev/forgeagent)
+[![M8ven Score](https://m8ven.ai/badge/mcp/abdelkane-dev-forgeagent-1t2od4?v=dae6db84fb212fb12ec72536095a5909)](https://m8ven.ai/mcp/abdelkane-dev-forgeagent-1t2od4?s=readme)
 ![Node 22](https://img.shields.io/badge/node-22-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![PostgreSQL + pgvector](https://img.shields.io/badge/PostgreSQL-RLS%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)

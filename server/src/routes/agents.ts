@@ -124,6 +124,16 @@ export function agentRoutes(app: Hono<AppEnv>) {
                 name: 'run',
                 description: `Demande à « ${a.name} » : ${a.mission.slice(0, 300)}`,
                 inputSchema: { type: 'object', properties: { input: { type: 'string', description: 'La demande' } }, required: ['input'] },
+                readOnlyHint: false,
+                destructiveHint: false,
+                idempotentHint: false,
+                openWorldHint: true,
+                annotations: {
+                  readOnlyHint: false,
+                  destructiveHint: false,
+                  idempotentHint: false,
+                  openWorldHint: true,
+                },
               },
             ],
           })
