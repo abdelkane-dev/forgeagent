@@ -20,7 +20,15 @@ Chaque agent est un espace scellé : ses données, ses clés et ses coûts n’a
 ![PostgreSQL + pgvector](https://img.shields.io/badge/PostgreSQL-RLS%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)
 ![Claude](https://img.shields.io/badge/cerveau-Claude-D97757)
 
-**[▶ Essayer la démo en ligne](https://abdelkane-dev.github.io/forgeagent/)** · [Démarrage rapide](#-démarrage-rapide) · [Fonctionnalités](#-fonctionnalités) · [Isolation](#-isolation-par-agent) · [La Forge](#-la-forge) · [Architecture](#-architecture) · [Contribuer](#-contribuer)
+<br />
+
+<a href="https://www.agensi.io/skills/forgeagent-architect" target="_blank" rel="noopener"><img src="https://img.shields.io/badge/Agensi_Skill-forgeagent--architect_(Gratuit)-1f6feb?style=for-the-badge&logo=anthropic&logoColor=white" alt="forgeagent architect on Agensi" /></a>
+<a href="https://www.agensi.io/skills/forgeagent-evaluator" target="_blank" rel="noopener"><img src="https://img.shields.io/badge/Agensi_Skill-forgeagent--evaluator_($14.99)-238636?style=for-the-badge&logo=anthropic&logoColor=white" alt="forgeagent evaluator on Agensi" /></a>
+
+<br />
+<br />
+
+**[▶ Essayer la démo en ligne](https://abdelkane-dev.github.io/forgeagent/)** · [Skills Agensi.io](#-skills-agensiio-officiels) · [Démarrage rapide](#-démarrage-rapide) · [Fonctionnalités](#-fonctionnalités) · [Isolation](#-isolation-par-agent) · [La Forge](#-la-forge) · [Architecture](#-architecture) · [Contribuer](#-contribuer)
 
 <img src="docs/assets/accueil.png" alt="Page d’accueil de ForgeAgent" width="100%" />
 
@@ -134,6 +142,18 @@ flowchart LR
 | Le Veilleur de Feu | supervisor | Haiku → Sonnet sur anomalie | `readAgentHealth`, `readRecentErrors`, `notify` |
 
 Chaque tâche reçoit un **jeton de capacité** signé, limité dans le temps et à un seul agent. Les échanges passent par BullMQ, sont écrits dans l’audit de l’agent et **rejouables** ; les tokens lui sont imputés. Limites d’étapes, détection de boucle, plafond de permissions fixé par le demandeur, validation humaine des actions sensibles.
+
+### 📦 Skills Agensi.io officiels (pour Claude Code CLI, Cursor & VS Code)
+
+Les rôles d’ingénierie de La Forge sont également disponibles sous forme de compétences universelles prêtes à l’emploi sur la marketplace [Agensi.io](https://www.agensi.io) :
+
+- 📐 **[forgeagent-architect](https://www.agensi.io/skills/forgeagent-architect)** *(Gratuit)* : Extrait le duo *Dessinateur + Sentinelle*. Conçoit des topologies d’agents Claude avec isolation RLS, barrières SSRF, garde-fous Zod et annotations d’outils MCP conformes à l'audit de sécurité Agensi en 8 points.
+- 🧪 **[forgeagent-evaluator](https://www.agensi.io/skills/forgeagent-evaluator)** *($14.99)* : Extrait *Le Trempeur*. Générateur de suites de régression à 4 niveaux (nominal, limite, adversaire, destructif), couplé à un exécuteur CLI sans dépendance (`eval-runner.mjs`) pour bloquer les régressions de prompts en CI/CD.
+
+```bash
+# Exemple avec le runner de régression ForgeAgent Evaluator
+node scripts/eval-runner.mjs run --suite test-suite.json --github-actions
+```
 
 ## 🏗 Architecture
 

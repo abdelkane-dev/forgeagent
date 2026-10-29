@@ -631,3 +631,4 @@ console.log('   · demo-eval-terminal.png   — Real CLI simulate output');
 console.log('   · demo-eval-github-ci.png  — Real GitHub CI report view');
 console.log('   · demo-architect-flow.png  — Real agent-spec.json in VS Code');
 console.log('   · demo-mcp-audit.png       — Real MCP Audit Dashboard (8/8)');
+
