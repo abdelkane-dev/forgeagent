@@ -26,6 +26,7 @@
     "bullmq": "^6.5.1",
     "dotenv": "^18.0.9",
     "drizzle-orm": "^0.45.4",
+    "forgeagent": "file:..",
     "hono": "^4.13.14",
     "ioredis": "^6.0.0",
     "pg": "^8.23.1",
@@ -42,5 +43,10 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    }
   }
 }
